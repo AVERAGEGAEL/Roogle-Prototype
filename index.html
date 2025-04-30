@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roogle V2</title>
+    <title>Roogle V2 Prototype</title>
     <link rel="icon" type="image/png" href="Google.png">
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -15,29 +15,22 @@
         <button type="submit">Go</button>
     </form>
 
-    <!-- Dark Mode Toggle -->
-    <button id="darkModeToggle">Toggle Dark Mode</button>
-
-    <!-- Mobile View Toggle -->
-    <button id="mobileViewToggle">Toggle Mobile View</button>
-
-    <!-- Advanced Settings (Hidden by default) -->
-    <div id="advancedSettings" style="display:none;">
-        <label for="timeout">Timeout (in seconds):</label>
-        <input type="number" id="timeout" min="1" max="60" value="10">
-        <button id="saveSettings">Save Settings</button>
-    </div>
-
     <div id="loadingSpinner"></div>
 
     <div id="iframe-container" style="display: none; width: 100%; height: 90vh;">
         <iframe id="proxyIframe" style="width: 100%; height: 100%; border: none;"></iframe>
     </div>
 
-    <!-- Search Bar for searching within the page -->
-    <input type="text" id="searchBar" placeholder="Search within page...">
-
     <script>
+        function isValidURL(str) {
+            try {
+                const url = new URL(str.startsWith('http') ? str : 'https://' + str);
+                return url.hostname.includes('.') && !url.hostname.includes(' ');
+            } catch (e) {
+                return false;
+            }
+        }
+
         document.getElementById('proxyForm').addEventListener('submit', function(event) {
             event.preventDefault();
 
@@ -48,6 +41,11 @@
 
             if (!urlInput) {
                 alert('Please enter a URL.');
+                return;
+            }
+
+            if (!isValidURL(urlInput)) {
+                alert('Invalid URL. Please enter a valid website like example.com or https://example.com.');
                 return;
             }
 
@@ -63,41 +61,10 @@
             loadingSpinner.style.display = 'block';
 
             iframe.onload = () => {
-                // Hide loading spinner once iframe has loaded
                 loadingSpinner.style.display = 'none';
             };
 
             iframeContainer.style.display = 'block';
-        });
-
-        // Dark Mode Toggle
-        document.getElementById('darkModeToggle').addEventListener('click', function() {
-            document.body.classList.toggle('dark-mode');
-        });
-
-        // Mobile View Mode Toggle
-        document.getElementById('mobileViewToggle').addEventListener('click', function() {
-            const iframe = document.getElementById('proxyIframe');
-            iframe.style.width = iframe.style.width === '100%' ? '375px' : '100%';
-            iframe.style.height = iframe.style.height === '100%' ? '667px' : '100%';
-        });
-
-        // Search within the iframe
-        document.getElementById('searchBar').addEventListener('input', function() {
-            const searchQuery = this.value.toLowerCase();
-            const iframe = document.getElementById('proxyIframe');
-            const iframeDoc = iframe.contentWindow.document;
-
-            if (iframeDoc.body.innerText.toLowerCase().includes(searchQuery)) {
-                iframe.contentWindow.find(searchQuery);
-            }
-        });
-
-        // Save advanced settings (Timeout)
-        document.getElementById('saveSettings').addEventListener('click', function() {
-            const timeout = document.getElementById('timeout').value;
-            localStorage.setItem('proxyTimeout', timeout);
-            alert('Settings saved!');
         });
     </script>
 </body>
