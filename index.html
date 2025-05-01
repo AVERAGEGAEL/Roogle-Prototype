@@ -1,17 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Google</title>
-  <link rel="icon" type="image/png" href="Google.png">
-  <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Roogle V2 Prototype</title>
+  <link rel="icon" type="image/png" href="Google.png" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <h1>Roogle</h1>
 
   <form id="proxyForm">
-    <input type="text" id="url" placeholder="Enter a URL..." required>
+    <input type="text" id="url" placeholder="Enter a URL..." required />
     <button type="submit">Go</button>
   </form>
 
@@ -45,19 +45,16 @@
       }
 
       if (!isValidURL(urlInput)) {
-        alert('Invalid URL. Please enter a valid website like example.com or https://example.com.');
+        alert('Invalid URL. Please enter a valid site like example.com or https://example.com');
         return;
       }
 
-      // Auto-add https:// if missing
       if (!urlInput.startsWith('http://') && !urlInput.startsWith('https://')) {
         urlInput = 'https://' + urlInput;
       }
 
-      const proxyUrl = `https://fallen-america.uraverageopdoge.workers.dev/?url=${encodeURIComponent(urlInput)}`;
+      const proxyUrl = `https://fallen-amazon.uraverageopdoge.workers.dev/?url=${encodeURIComponent(urlInput)}`;
       iframe.src = proxyUrl;
-
-      // Show loading spinner
       loadingSpinner.style.display = 'block';
 
       iframe.onload = () => {
