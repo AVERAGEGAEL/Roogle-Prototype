@@ -1,17 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Roogle V2 Prototype</title>
-  <link rel="icon" type="image/png" href="Google.png" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" type="image/png" href="Google.png">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <h1>Roogle</h1>
+  <h1>Roogle V2</h1>
 
   <form id="proxyForm">
-    <input type="text" id="url" placeholder="Enter a URL..." required />
+    <input type="text" id="url" placeholder="Enter a URL..." required>
     <button type="submit">Go</button>
   </form>
 
@@ -19,6 +19,11 @@
 
   <div id="iframe-container" style="display: none; width: 100%; height: 90vh;">
     <iframe id="proxyIframe" style="width: 100%; height: 100%; border: none;"></iframe>
+  </div>
+
+  <!-- Info Box -->
+  <div id="info-section">
+    <p><strong>Proxy Status:</strong> Working smoothly as of <span id="last-updated"></span>.</p>
   </div>
 
   <script>
@@ -30,6 +35,14 @@
         return false;
       }
     }
+
+    // Set last updated date when the page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      const lastUpdatedElement = document.getElementById('last-updated');
+      const currentDate = new Date();
+      const formattedDate = `${currentDate.toLocaleDateString()} at ${currentDate.toLocaleTimeString()}`;
+      lastUpdatedElement.textContent = formattedDate;
+    });
 
     document.getElementById('proxyForm').addEventListener('submit', function(event) {
       event.preventDefault();
@@ -45,16 +58,19 @@
       }
 
       if (!isValidURL(urlInput)) {
-        alert('Invalid URL. Please enter a valid site like example.com or https://example.com');
+        alert('Invalid URL. Please enter a valid website like example.com or https://example.com.');
         return;
       }
 
+      // Auto-add https:// if missing
       if (!urlInput.startsWith('http://') && !urlInput.startsWith('https://')) {
         urlInput = 'https://' + urlInput;
       }
 
       const proxyUrl = `https://fallen-amazon.uraverageopdoge.workers.dev/?url=${encodeURIComponent(urlInput)}`;
       iframe.src = proxyUrl;
+
+      // Show loading spinner
       loadingSpinner.style.display = 'block';
 
       iframe.onload = () => {
