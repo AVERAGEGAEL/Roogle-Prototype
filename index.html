@@ -1,84 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Roogle V2 Prototype</title>
-  <link rel="icon" type="image/png" href="Google.png">
-  <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Roogle V3 Prototype</title>
+  <link rel="icon" type="image/png" href="Google.png" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <h1>Roogle V2</h1>
+  <h1>Roogle V3 Prototype</h1>
 
   <form id="proxyForm">
-    <input type="text" id="url" placeholder="Enter a URL..." required>
+    <input type="text" id="url" placeholder="Enter a URL..." required />
     <button type="submit">Go</button>
   </form>
 
   <div id="loadingSpinner"></div>
 
   <div id="iframe-container" style="display: none; width: 100%; height: 90vh;">
-    <iframe id="proxyIframe" style="width: 100%; height: 100%; border: none;"></iframe>
+    <iframe
+      id="proxyIframe"
+      style="width: 100%; height: 100%; border: none;"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+    ></iframe>
   </div>
 
-  <!-- Info Box -->
   <div id="info-section">
-    <p><strong>Proxy Status:</strong> Working smoothly as of <span id="last-updated"></span>.</p>
+    <p>
+      <strong>Proxy Status:</strong> Working smoothly as of
+      <span id="last-updated"></span>.
+    </p>
   </div>
 
-  <script>
-    function isValidURL(str) {
-      try {
-        const url = new URL(str.startsWith('http') ? str : 'https://' + str);
-        return url.hostname.includes('.') && !url.hostname.includes(' ');
-      } catch (e) {
-        return false;
-      }
-    }
-
-    // Set last updated date when the page loads
-    document.addEventListener('DOMContentLoaded', function() {
-      const lastUpdatedElement = document.getElementById('last-updated');
-      const currentDate = new Date();
-      const formattedDate = `${currentDate.toLocaleDateString()} at ${currentDate.toLocaleTimeString()}`;
-      lastUpdatedElement.textContent = formattedDate;
-    });
-
-    document.getElementById('proxyForm').addEventListener('submit', function(event) {
-      event.preventDefault();
-
-      let urlInput = document.getElementById('url').value.trim();
-      const iframe = document.getElementById('proxyIframe');
-      const iframeContainer = document.getElementById('iframe-container');
-      const loadingSpinner = document.getElementById('loadingSpinner');
-
-      if (!urlInput) {
-        alert('Please enter a URL.');
-        return;
-      }
-
-      if (!isValidURL(urlInput)) {
-        alert('Invalid URL. Please enter a valid website like example.com or https://example.com.');
-        return;
-      }
-
-      // Auto-add https:// if missing
-      if (!urlInput.startsWith('http://') && !urlInput.startsWith('https://')) {
-        urlInput = 'https://' + urlInput;
-      }
-
-      const proxyUrl = `https://fallen-amazon.uraverageopdoge.workers.dev/?url=${encodeURIComponent(urlInput)}`;
-      iframe.src = proxyUrl;
-
-      // Show loading spinner
-      loadingSpinner.style.display = 'block';
-
-      iframe.onload = () => {
-        loadingSpinner.style.display = 'none';
-      };
-
-      iframeContainer.style.display = 'block';
-    });
-  </script>
+  <script src="script.js"></script>
 </body>
 </html>
