@@ -17,7 +17,7 @@ function isUVRequired(url) {
 }
 
 // Base URLs for proxies
-const baseUV = 'https://averagegael.github.io/Roogle-UV-Backend/uv/service/';
+const baseUV = 'https://ultra-gael.uraverageopdoge.workers.dev/uv/service/';
 const baseIframe = 'https://fallen-amazon.uraverageopdoge.workers.dev/?url=';
 
 document.addEventListener('DOMContentLoaded', () => {
