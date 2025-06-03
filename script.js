@@ -17,7 +17,7 @@ function isUVRequired(url) {
 }
 
 // Base URLs for proxies
-const baseUV = 'https://ultra-gael.uraverageopdoge.workers.dev/uv/service/';
+const baseUV = 'https://ultra-gael.uraverageopdoge.workers.dev/?url=';
 const baseIframe = 'https://fallen-amazon.uraverageopdoge.workers.dev/?url=';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -50,10 +50,14 @@ document.addEventListener('DOMContentLoaded', () => {
       urlInput = 'https://' + urlInput;
     }
 
-    // Decide which proxy to use
-    const proxyUrl = isUVRequired(urlInput)
-      ? baseUV + encodeURIComponent(urlInput)
-      : baseIframe + encodeURIComponent(urlInput);
+    const encodedUrl = encodeURIComponent(urlInput);
+    let proxyUrl;
+
+    if (isUVRequired(urlInput)) {
+      proxyUrl = baseUV + encodedUrl; // Use UV backend
+    } else {
+      proxyUrl = baseIframe + encodedUrl; // Use iframe proxy
+    }
 
     iframe.src = proxyUrl;
     iframeContainer.style.display = 'block';
