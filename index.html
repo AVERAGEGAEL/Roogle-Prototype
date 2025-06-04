@@ -3,35 +3,43 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Roogle V3 Prototype</title>
-  <link rel="icon" type="image/png" href="Google.png" />
-  <link rel="stylesheet" href="styles.css" />
+  <title>Roogle UV Backend Proxy</title>
+  <style>
+    body, html { margin: 0; height: 100%; overflow: hidden; }
+    #uv-app { width: 100%; height: 100vh; border: none; }
+  </style>
 </head>
 <body>
-  <h1>Roogle V3 Prototype</h1>
+  <iframe id="uv-app" src="about:blank"></iframe>
 
-  <form id="proxyForm">
-    <input type="text" id="url" placeholder="Enter a URL..." required />
-    <button type="submit">Go</button>
-  </form>
+  <!-- Load Ultraviolet core script from CDN -->
+  <script src="https://unpkg.com/ultraviolet@latest/dist/uv.bundle.js"></script>
+  <script src="uv.config.js"></script>
+  <script>
+    window.addEventListener('load', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const targetUrl = urlParams.get('url');
 
-  <div id="loadingSpinner"></div>
+      if (!targetUrl) {
+        document.body.innerHTML = '<h2>Please provide a URL with ?url= parameter</h2>';
+        return;
+      }
 
-  <div id="iframe-container" style="display: none; width: 100%; height: 90vh;">
-    <iframe
-      id="proxyIframe"
-      style="width: 100%; height: 100%; border: none;"
-      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-    ></iframe>
-  </div>
+      if (typeof Ultraviolet === 'undefined') {
+        document.body.innerHTML = '<h2>Failed to load Ultraviolet core script.</h2>';
+        return;
+      }
 
-  <div id="info-section">
-    <p>
-      <strong>Proxy Status:</strong> Working smoothly as of
-      <span id="last-updated"></span>.
-    </p>
-  </div>
+      Ultraviolet.init(__uv$config);
+      Ultraviolet.load(targetUrl);
 
-  <script src="script.js"></script>
+      const uvIframe = document.querySelector('iframe#uv-app');
+      if (uvIframe) {
+        uvIframe.remove();
+      }
+
+      document.body.appendChild(Ultraviolet.getIframe());
+    });
+  </script>
 </body>
 </html>
