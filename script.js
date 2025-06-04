@@ -8,7 +8,7 @@ function isValidURL(str) {
   }
 }
 
-// Which sites need Ultraviolet proxy?
+// Decide if the Ultraviolet backend is needed
 function isUVRequired(url) {
   const hostname = new URL(url).hostname.toLowerCase();
   return ['google.com', 'poki.com', 'retrogames.cc', 'coolmathgames.com'].some(site =>
@@ -21,10 +21,12 @@ const uvBackendBase = 'https://averagegael.github.io/Roogle-UV-Backend/?url=';
 const baseIframe = 'https://fallen-amazon.uraverageopdoge.workers.dev/?url=';
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Update timestamp
   const lastUpdatedElement = document.getElementById('last-updated');
   const now = new Date();
   lastUpdatedElement.textContent = `${now.toLocaleDateString()} at ${now.toLocaleTimeString()}`;
 
+  // Form and iframe logic
   const form = document.getElementById('proxyForm');
   const iframe = document.getElementById('proxyIframe');
   const iframeContainer = document.getElementById('iframe-container');
@@ -45,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Auto-add https:// if missing
+    // Add https:// if it's missing
     if (!urlInput.startsWith('http://') && !urlInput.startsWith('https://')) {
       urlInput = 'https://' + urlInput;
     }
@@ -57,8 +59,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     iframe.src = proxyUrl;
     iframeContainer.style.display = 'block';
-
     loadingSpinner.style.display = 'block';
+
     iframe.onload = () => {
       loadingSpinner.style.display = 'none';
     };
