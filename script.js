@@ -7,14 +7,15 @@ const form = document.getElementById("proxyForm");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
 const lastUpdatedElement = document.getElementById("last-updated");
 
-// Headless backend URL (Render)
+// Headless backend URL (Render / Fly.io etc.)
 const headlessBackend = 'https://roogle-v3-backend.onrender.com/?url=';
 
-// Lightweight iframe fallback URL (optional if you have a Worker)
-const iframeFallback = ''; // You can fill with your existing Cloudflare UV if needed
+// Lightweight iframe fallback URL (Cloudflare Worker UV if you want)
+const iframeFallback = '';
 
-// Sites that require headless browser
-const headlessSites = ["google.com","youtube.com","poki.com","retrogames.cc","coolmathgames.com"];
+// Sites that require special handling
+const clientProxySites = ["google.com", "youtube.com"]; // handled by client-proxy.js
+const headlessSites = ["poki.com","retrogames.cc","coolmathgames.com"]; // handled by backend
 
 // -------------------- UTILS --------------------
 function isValidURL(str) {
@@ -24,6 +25,10 @@ function isValidURL(str) {
   } catch {
     return false;
   }
+}
+
+function needsClientProxy(url) {
+  return clientProxySites.some(site => new URL(url).hostname.includes(site));
 }
 
 function needsHeadless(url) {
@@ -54,18 +59,22 @@ form.addEventListener("submit", async (e) => {
   iframeContainer.style.display = "block";
   showSpinner(true);
 
+  if (needsClientProxy(urlInput)) {
+    // Use client proxy (UV-lite)
+    loadClientProxy(urlInput);
+    return;
+  }
+
   let proxyUrl = needsHeadless(urlInput)
     ? headlessBackend + encodeURIComponent(urlInput)
     : (iframeFallback ? iframeFallback + encodeURIComponent(urlInput) : urlInput);
 
   iframe.src = proxyUrl;
 
-  // Handle iframe load errors (automatic fallback)
   iframe.onload = () => showSpinner(false);
   iframe.onerror = () => {
     showSpinner(false);
     if (!needsHeadless(urlInput) && headlessBackend) {
-      // fallback to headless if iframe fails
       iframe.src = headlessBackend + encodeURIComponent(urlInput);
       showSpinner(true);
     } else {
@@ -84,3 +93,10 @@ fullscreenBtn.addEventListener("click", () => {
     document.exitFullscreen();
   }
 });
+
+// -------------------- CLIENT PROXY HANDLER --------------------
+function loadClientProxy(url) {
+  showSpinner(true);
+  iframe.src = "client-proxy.html#url=" + encodeURIComponent(url); 
+  iframe.onload = () => showSpinner(false);
+}
