@@ -1,42 +1,87 @@
-// Client-side proxy renderer
+// -------------------- CLIENT-PROXY.JS --------------------
+const contentDiv = document.getElementById("content");
 
-async function loadProxiedSite() {
+// Utility: parse URL from hash
+function getTargetURL() {
   const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  const target = params.get("url");
-  if (!target) {
-    document.getElementById("content").innerText = "❌ No URL provided";
-    return;
-  }
+  return params.get("url");
+}
 
-  try {
-    const res = await fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent(target));
-    if (!res.ok) throw new Error("Fetch failed");
+// Convert relative links/scripts to absolute and keep in-proxy navigation
+function rewriteHTML(html, baseURL) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
 
-    let html = await res.text();
-
-    // Basic rewrite: make relative links absolute
-    html = html.replace(/(href|src)=["'](\/[^"']*)["']/g, (match, attr, path) => {
-      return `${attr}="${new URL(path, target).href}"`;
-    });
-
-    // Inject into #content
-    document.getElementById("content").innerHTML = html;
-
-    // Rewire <a> tags so they reload through proxy
-    document.querySelectorAll("a").forEach(a => {
+  // Rewrite <a> tags
+  doc.querySelectorAll("a").forEach(a => {
+    const href = a.getAttribute("href");
+    if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
+      const abs = new URL(href, baseURL).href;
+      a.setAttribute("href", "#" + "url=" + encodeURIComponent(abs));
       a.addEventListener("click", e => {
         e.preventDefault();
-        const href = a.href;
-        if (href) {
-          window.location.hash = "url=" + encodeURIComponent(href);
-          loadProxiedSite();
-        }
+        loadProxiedSite(abs);
       });
-    });
+    }
+  });
 
+  // Rewrite forms
+  doc.querySelectorAll("form").forEach(f => {
+    f.addEventListener("submit", e => {
+      e.preventDefault();
+      const action = f.getAttribute("action") || baseURL;
+      const abs = new URL(action, baseURL).href;
+      // serialize form data
+      const data = new FormData(f);
+      const query = new URLSearchParams(data).toString();
+      let fullURL = abs;
+      if (f.method.toLowerCase() === "get") {
+        fullURL += (abs.includes("?") ? "&" : "?") + query;
+      }
+      loadProxiedSite(fullURL);
+    });
+  });
+
+  // Rewrite <link> and <script> src/href to absolute
+  doc.querySelectorAll("link, script, img").forEach(tag => {
+    const attr = tag.tagName.toLowerCase() === "link" ? "href" : "src";
+    const val = tag.getAttribute(attr);
+    if (val && !val.startsWith("http") && !val.startsWith("data:")) {
+      tag.setAttribute(attr, new URL(val, baseURL).href);
+    }
+  });
+
+  return doc.documentElement.innerHTML;
+}
+
+// Load site inside proxy
+async function loadProxiedSite(url) {
+  contentDiv.innerHTML = "🔄 Loading...";
+  window.location.hash = "url=" + encodeURIComponent(url);
+
+  try {
+    // Use AllOrigins CORS bypass
+    const res = await fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent(url));
+    if (!res.ok) throw new Error("Fetch failed with status " + res.status);
+
+    let html = await res.text();
+    html = rewriteHTML(html, url);
+
+    contentDiv.innerHTML = html;
   } catch (err) {
-    document.getElementById("content").innerText = "⚠️ Error: " + err.message;
+    contentDiv.innerHTML = `⚠️ Error loading URL: ${err.message}`;
+    console.error(err);
   }
 }
 
-window.addEventListener("load", loadProxiedSite);
+// Initial load
+window.addEventListener("load", () => {
+  const target = getTargetURL();
+  if (target) loadProxiedSite(target);
+});
+
+// Handle hash change (back/forward)
+window.addEventListener("hashchange", () => {
+  const target = getTargetURL();
+  if (target) loadProxiedSite(target);
+});
