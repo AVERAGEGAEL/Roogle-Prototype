@@ -17,7 +17,7 @@ function isUVRequired(url) {
 }
 
 // Proxy URLs
-const uvBackendBase = 'https://uv.uraverageopdoge.workers.dev/';
+const uvBackendBase = 'https://roogle-v3-backend.onrender.com/?url=';
 const baseIframe = 'https://fallen-amazon.uraverageopdoge.workers.dev/?url=';
 
 document.addEventListener('DOMContentLoaded', () => {
