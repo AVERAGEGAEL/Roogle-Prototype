@@ -1,4 +1,4 @@
-// Helper: Validate URL format
+// Validate URL format
 function isValidURL(str) {
   try {
     const url = new URL(str.startsWith('http') ? str : 'https://' + str);
@@ -8,35 +8,33 @@ function isValidURL(str) {
   }
 }
 
-// Decide if the Ultraviolet backend is needed
+// Decide if UV backend is needed
 function isUVRequired(url) {
   const hostname = new URL(url).hostname.toLowerCase();
-  return ['google.com', 'poki.com', 'retrogames.cc', 'coolmathgames.com'].some(site =>
+  return ['google.com', 'youtube.com', 'poki.com', 'retrogames.cc', 'coolmathgames.com'].some(site =>
     hostname.includes(site)
   );
 }
 
-// Base URLs for proxies
-const uvBackendBase = 'https://averagegael.github.io/Roogle-UV-Backend/?url=';
+// Proxy URLs
+const uvBackendBase = 'https://uv.uraverageopdoge.workers.dev/';
 const baseIframe = 'https://fallen-amazon.uraverageopdoge.workers.dev/?url=';
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Update timestamp
   const lastUpdatedElement = document.getElementById('last-updated');
   const now = new Date();
   lastUpdatedElement.textContent = `${now.toLocaleDateString()} at ${now.toLocaleTimeString()}`;
 
-  // Form and iframe logic
   const form = document.getElementById('proxyForm');
   const iframe = document.getElementById('proxyIframe');
   const iframeContainer = document.getElementById('iframe-container');
   const loadingSpinner = document.getElementById('loadingSpinner');
+  const fullscreenBtn = document.getElementById('fullscreen-btn');
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
 
     let urlInput = document.getElementById('url').value.trim();
-
     if (!urlInput) {
       alert('Please enter a URL.');
       return;
@@ -47,15 +45,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Add https:// if it's missing
     if (!urlInput.startsWith('http://') && !urlInput.startsWith('https://')) {
       urlInput = 'https://' + urlInput;
     }
 
-    const encodedUrl = encodeURIComponent(urlInput);
     const proxyUrl = isUVRequired(urlInput)
-      ? uvBackendBase + encodedUrl
-      : baseIframe + encodedUrl;
+      ? uvBackendBase + encodeURIComponent(urlInput)
+      : baseIframe + encodeURIComponent(urlInput);
 
     iframe.src = proxyUrl;
     iframeContainer.style.display = 'block';
@@ -64,5 +60,26 @@ document.addEventListener('DOMContentLoaded', () => {
     iframe.onload = () => {
       loadingSpinner.style.display = 'none';
     };
+
+    iframe.onerror = () => {
+      loadingSpinner.style.display = 'none';
+      iframeContainer.innerHTML = `
+        <div style="padding:20px; color:#d93025;">
+          <h2>⚠️ Site blocked from embedding</h2>
+          <p>This website doesn’t allow being opened inside Roogle V3.<br>
+          It will work through the UV backend if supported.</p>
+        </div>`;
+    };
+  });
+
+  // Fullscreen toggle
+  fullscreenBtn.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        alert(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
   });
 });
