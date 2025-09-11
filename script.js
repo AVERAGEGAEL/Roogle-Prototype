@@ -50,8 +50,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const proxyUrl = isUVRequired(urlInput)
-      ? uvBackendBase + encodeURIComponent(urlInput)
-      : baseIframe + encodeURIComponent(urlInput);
+  ? uvBackendBase + '?url=' + encodeURIComponent(urlInput) // <-- add ?url=
+  : baseIframe + encodeURIComponent(urlInput);
 
     iframe.src = proxyUrl;
     iframeContainer.style.display = 'block';
