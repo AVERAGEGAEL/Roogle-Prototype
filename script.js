@@ -1,85 +1,86 @@
-// Validate URL format
+// -------------------- CONFIG --------------------
+const iframe = document.getElementById("proxyIframe");
+const iframeContainer = document.getElementById("iframe-container");
+const loadingSpinner = document.getElementById("loadingSpinner");
+const searchBox = document.getElementById("url");
+const form = document.getElementById("proxyForm");
+const fullscreenBtn = document.getElementById("fullscreen-btn");
+const lastUpdatedElement = document.getElementById("last-updated");
+
+// Headless backend URL (Render)
+const headlessBackend = 'https://roogle-v3-backend.onrender.com/?url=';
+
+// Lightweight iframe fallback URL (optional if you have a Worker)
+const iframeFallback = ''; // You can fill with your existing Cloudflare UV if needed
+
+// Sites that require headless browser
+const headlessSites = ["google.com","youtube.com","poki.com","retrogames.cc","coolmathgames.com"];
+
+// -------------------- UTILS --------------------
 function isValidURL(str) {
   try {
-    const url = new URL(str.startsWith('http') ? str : 'https://' + str);
-    return url.hostname.includes('.') && !url.hostname.includes(' ');
-  } catch (e) {
+    const url = new URL(str.startsWith("http") ? str : "https://" + str);
+    return url.hostname.includes(".") && !url.hostname.includes(" ");
+  } catch {
     return false;
   }
 }
 
-// Decide if UV backend is needed
-function isUVRequired(url) {
-  const hostname = new URL(url).hostname.toLowerCase();
-  return ['google.com', 'youtube.com', 'poki.com', 'retrogames.cc', 'coolmathgames.com'].some(site =>
-    hostname.includes(site)
-  );
+function needsHeadless(url) {
+  return headlessSites.some(site => new URL(url).hostname.includes(site));
 }
 
-// Proxy URLs
-const uvBackendBase = 'https://roogle-v3-backend.onrender.com/?url=';
-const baseIframe = 'https://fallen-amazon.uraverageopdoge.workers.dev/?url=';
+function showSpinner(show = true) {
+  loadingSpinner.style.display = show ? "block" : "none";
+}
 
-document.addEventListener('DOMContentLoaded', () => {
-  const lastUpdatedElement = document.getElementById('last-updated');
-  const now = new Date();
-  lastUpdatedElement.textContent = `${now.toLocaleDateString()} at ${now.toLocaleTimeString()}`;
+// -------------------- MAIN --------------------
+document.addEventListener("DOMContentLoaded", () => {
+  lastUpdatedElement.textContent = `${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`;
+});
 
-  const form = document.getElementById('proxyForm');
-  const iframe = document.getElementById('proxyIframe');
-  const iframeContainer = document.getElementById('iframe-container');
-  const loadingSpinner = document.getElementById('loadingSpinner');
-  const fullscreenBtn = document.getElementById('fullscreen-btn');
+// Handle form submission
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  let urlInput = searchBox.value.trim();
 
-  form.addEventListener('submit', (event) => {
-    event.preventDefault();
+  if (!urlInput) return alert("Please enter a URL.");
+  if (!isValidURL(urlInput)) return alert("Invalid URL. Use example.com or https://example.com.");
 
-    let urlInput = document.getElementById('url').value.trim();
-    if (!urlInput) {
-      alert('Please enter a URL.');
-      return;
-    }
+  if (!urlInput.startsWith("http://") && !urlInput.startsWith("https://")) {
+    urlInput = "https://" + urlInput;
+  }
 
-    if (!isValidURL(urlInput)) {
-      alert('Invalid URL. Please enter a valid website like example.com or https://example.com.');
-      return;
-    }
+  iframeContainer.style.display = "block";
+  showSpinner(true);
 
-    if (!urlInput.startsWith('http://') && !urlInput.startsWith('https://')) {
-      urlInput = 'https://' + urlInput;
-    }
+  let proxyUrl = needsHeadless(urlInput)
+    ? headlessBackend + encodeURIComponent(urlInput)
+    : (iframeFallback ? iframeFallback + encodeURIComponent(urlInput) : urlInput);
 
-    const proxyUrl = isUVRequired(urlInput)
-  ? uvBackendBase + '?url=' + encodeURIComponent(urlInput) // <-- add ?url=
-  : baseIframe + encodeURIComponent(urlInput);
+  iframe.src = proxyUrl;
 
-    iframe.src = proxyUrl;
-    iframeContainer.style.display = 'block';
-    loadingSpinner.style.display = 'block';
-
-    iframe.onload = () => {
-      loadingSpinner.style.display = 'none';
-    };
-
-    iframe.onerror = () => {
-      loadingSpinner.style.display = 'none';
-      iframeContainer.innerHTML = `
-        <div style="padding:20px; color:#d93025;">
-          <h2>⚠️ Site blocked from embedding</h2>
-          <p>This website doesn’t allow being opened inside Roogle V3.<br>
-          It will work through the UV backend if supported.</p>
-        </div>`;
-    };
-  });
-
-  // Fullscreen toggle
-  fullscreenBtn.addEventListener('click', () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(err => {
-        alert(`Error attempting to enable fullscreen: ${err.message}`);
-      });
+  // Handle iframe load errors (automatic fallback)
+  iframe.onload = () => showSpinner(false);
+  iframe.onerror = () => {
+    showSpinner(false);
+    if (!needsHeadless(urlInput) && headlessBackend) {
+      // fallback to headless if iframe fails
+      iframe.src = headlessBackend + encodeURIComponent(urlInput);
+      showSpinner(true);
     } else {
-      document.exitFullscreen();
+      alert("Unable to load the site fully. Try opening in a normal browser.");
     }
-  });
+  };
+});
+
+// -------------------- FULLSCREEN --------------------
+fullscreenBtn.addEventListener("click", () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(err => {
+      alert(`Error attempting to enable fullscreen: ${err.message}`);
+    });
+  } else {
+    document.exitFullscreen();
+  }
 });
