@@ -1,13 +1,22 @@
 // -------------------- CLIENT-PROXY.JS --------------------
 const contentDiv = document.getElementById("content");
 
+// Hardcoded build timestamp (updates only when you change it in GitHub)
+const buildTimestamp = "September 12, 2025 at 2:30 PM";
+
+// Show last updated (if element exists)
+document.addEventListener("DOMContentLoaded", () => {
+  const el = document.getElementById("last-updated");
+  if (el) el.textContent = buildTimestamp;
+});
+
 // Utility: parse URL from hash
 function getTargetURL() {
   const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   return params.get("url");
 }
 
-// Convert relative links/scripts to absolute and keep in-proxy navigation
+// Rewrite HTML: fix links, forms, assets
 function rewriteHTML(html, baseURL) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
@@ -25,24 +34,26 @@ function rewriteHTML(html, baseURL) {
     }
   });
 
-  // Rewrite forms
+  // Rewrite forms (so Google search works)
   doc.querySelectorAll("form").forEach(f => {
     f.addEventListener("submit", e => {
       e.preventDefault();
       const action = f.getAttribute("action") || baseURL;
       const abs = new URL(action, baseURL).href;
-      // serialize form data
+
       const data = new FormData(f);
       const query = new URLSearchParams(data).toString();
+
       let fullURL = abs;
       if (f.method.toLowerCase() === "get") {
         fullURL += (abs.includes("?") ? "&" : "?") + query;
       }
+
       loadProxiedSite(fullURL);
     });
   });
 
-  // Rewrite <link> and <script> src/href to absolute
+  // Rewrite assets (CSS, JS, images)
   doc.querySelectorAll("link, script, img").forEach(tag => {
     const attr = tag.tagName.toLowerCase() === "link" ? "href" : "src";
     const val = tag.getAttribute(attr);
@@ -60,8 +71,9 @@ async function loadProxiedSite(url) {
   window.location.hash = "url=" + encodeURIComponent(url);
 
   try {
-    // Use AllOrigins CORS bypass
-    const res = await fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent(url));
+    // Pick CORS proxy (allorigins is fallback)
+    const proxy = "https://corsproxy.io/?" + encodeURIComponent(url);
+    const res = await fetch(proxy);
     if (!res.ok) throw new Error("Fetch failed with status " + res.status);
 
     let html = await res.text();
@@ -80,7 +92,7 @@ window.addEventListener("load", () => {
   if (target) loadProxiedSite(target);
 });
 
-// Handle hash change (back/forward)
+// Handle hash change (back/forward buttons)
 window.addEventListener("hashchange", () => {
   const target = getTargetURL();
   if (target) loadProxiedSite(target);
