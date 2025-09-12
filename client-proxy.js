@@ -1,15 +1,6 @@
 // -------------------- CLIENT-PROXY.JS --------------------
 const contentDiv = document.getElementById("content");
 
-// Hardcoded build timestamp (updates only when you change it in GitHub)
-const buildTimestamp = "September 12, 2025 at 2:30 PM";
-
-// Show last updated (if element exists)
-document.addEventListener("DOMContentLoaded", () => {
-  const el = document.getElementById("last-updated");
-  if (el) el.textContent = buildTimestamp;
-});
-
 // Utility: parse URL from hash
 function getTargetURL() {
   const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -39,17 +30,19 @@ function rewriteHTML(html, baseURL) {
     f.addEventListener("submit", e => {
       e.preventDefault();
       const action = f.getAttribute("action") || baseURL;
-      const abs = new URL(action, baseURL).href;
+      let abs = new URL(action, baseURL).href;
 
       const data = new FormData(f);
       const query = new URLSearchParams(data).toString();
 
-      let fullURL = abs;
-      if (f.method.toLowerCase() === "get") {
-        fullURL += (abs.includes("?") ? "&" : "?") + query;
+      // Special handling for Google search
+      if (abs.includes("google.")) {
+        abs += (abs.includes("?") ? "&" : "?") + query;
+      } else if (f.method.toLowerCase() === "get") {
+        abs += (abs.includes("?") ? "&" : "?") + query;
       }
 
-      loadProxiedSite(fullURL);
+      loadProxiedSite(abs);
     });
   });
 
@@ -65,24 +58,55 @@ function rewriteHTML(html, baseURL) {
   return doc.documentElement.innerHTML;
 }
 
+// Re-inject <script> tags to execute JS
+function reinjectScripts(container) {
+  container.querySelectorAll("script").forEach(oldScript => {
+    const newScript = document.createElement("script");
+    if (oldScript.src) {
+      newScript.src = oldScript.src;
+      newScript.async = false; // preserve order
+    } else {
+      newScript.textContent = oldScript.textContent;
+    }
+    oldScript.replaceWith(newScript);
+  });
+}
+
+// Show loading spinner
+function showLoading(show = true) {
+  contentDiv.innerHTML = show ? "🔄 Loading..." : "";
+}
+
 // Load site inside proxy
 async function loadProxiedSite(url) {
-  contentDiv.innerHTML = "🔄 Loading...";
+  showLoading(true);
   window.location.hash = "url=" + encodeURIComponent(url);
 
   try {
-    // Pick CORS proxy (allorigins is fallback)
-    const proxy = "https://corsproxy.io/?" + encodeURIComponent(url);
-    const res = await fetch(proxy);
+    // Direct fetch (uses computer IP)
+    const res = await fetch(url, { method: "GET", mode: "cors" });
     if (!res.ok) throw new Error("Fetch failed with status " + res.status);
 
     let html = await res.text();
     html = rewriteHTML(html, url);
 
     contentDiv.innerHTML = html;
+    reinjectScripts(contentDiv);
+    showLoading(false);
   } catch (err) {
-    contentDiv.innerHTML = `⚠️ Error loading URL: ${err.message}`;
-    console.error(err);
+    // Fallback: use CORS proxy if direct fetch fails
+    try {
+      const proxy = "https://corsproxy.io/?" + encodeURIComponent(url);
+      const res2 = await fetch(proxy);
+      if (!res2.ok) throw new Error("Proxy fetch failed with status " + res2.status);
+      let html = await res2.text();
+      html = rewriteHTML(html, url);
+      contentDiv.innerHTML = html;
+      reinjectScripts(contentDiv);
+    } catch (err2) {
+      contentDiv.innerHTML = `⚠️ Error loading URL: ${err.message}`;
+      console.error(err, err2);
+    }
   }
 }
 
