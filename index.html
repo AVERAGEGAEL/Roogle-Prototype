@@ -19,21 +19,27 @@
 
   <div id="loadingSpinner"></div>
 
-  <div id="iframe-container" style="display: none; width: 100%; height: 90vh;">
+  <div id="iframe-container" style="display: flex; width: 100%; height: 85vh; gap: 10px;">
     <iframe
       id="proxyIframe"
-      style="width: 100%; height: 100%; border: none;"
+      style="flex: 3; border: none;"
       sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
     ></iframe>
+
+    <!-- Debug panel -->
+    <div id="debugPanel" style="flex: 1; background: #f8f8f8; border: 1px solid #dcdcdc; border-radius: 8px; padding: 10px; overflow-y: auto; font-size: 12px;">
+      <strong>Debug Panel</strong>
+      <ul id="debugLogs"></ul>
+    </div>
   </div>
 
   <div id="info-section">
     <p>
-      <strong>Roogle V3 Version:</strong> 3.0<br/>
-      <strong>Last Updated:</strong> <span id="last-updated"></span>
+      <strong>Roogle V3 Version (debug):</strong> 3.0
     </p>
   </div>
 
+  <script src="client-proxy.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
