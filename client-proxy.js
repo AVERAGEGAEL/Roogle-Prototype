@@ -1,10 +1,20 @@
-// -------------------- CLIENT-PROXY.JS --------------------
 const contentDiv = document.getElementById("content");
+const debugLogs = document.getElementById("debugLogs");
 
 // Utility: parse URL from hash
 function getTargetURL() {
   const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   return params.get("url");
+}
+
+// Log message to debug panel
+function logDebug(message, type = "info") {
+  if (!debugLogs) return;
+  const li = document.createElement("li");
+  li.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+  li.style.color = type === "error" ? "red" : type === "warn" ? "orange" : "black";
+  debugLogs.appendChild(li);
+  debugLogs.scrollTop = debugLogs.scrollHeight;
 }
 
 // Rewrite HTML: fix links, forms, assets
@@ -41,6 +51,7 @@ function rewriteHTML(html, baseURL) {
         abs += (abs.includes("?") ? "&" : "?") + query;
       }
 
+      logDebug(`Form submit intercepted → ${abs}`);
       loadProxiedSite(abs);
     });
   });
@@ -57,13 +68,13 @@ function rewriteHTML(html, baseURL) {
   return doc.documentElement.innerHTML;
 }
 
-// Re-inject <script> tags to execute JS
+// Re-inject <script> tags
 function reinjectScripts(container) {
   container.querySelectorAll("script").forEach(oldScript => {
     const newScript = document.createElement("script");
     if (oldScript.src) {
       newScript.src = oldScript.src;
-      newScript.async = false; // preserve order
+      newScript.async = false;
     } else {
       newScript.textContent = oldScript.textContent;
     }
@@ -76,33 +87,39 @@ function showLoading(show = true) {
   contentDiv.innerHTML = show ? "🔄 Loading..." : "";
 }
 
-// Load site inside proxy with fallback
+// Load site inside proxy with debug + fallback
 async function loadProxiedSite(url) {
   showLoading(true);
-  window.location.hash = "url=" + encodeURIComponent(url);
+  logDebug(`Starting load: ${url}`);
 
   const proxies = [
-    null, // direct fetch first
+    null, // direct fetch
     "https://api.allorigins.win/raw?url=",
     "https://corsproxy.io/?"
   ];
 
   for (let i = 0; i < proxies.length; i++) {
     const targetURL = proxies[i] ? proxies[i] + encodeURIComponent(url) : url;
+    logDebug(`Attempt ${i + 1}: ${targetURL}`);
+
     try {
       const res = await fetch(targetURL);
       if (!res.ok) throw new Error("Fetch failed with status " + res.status);
+
+      logDebug(`Fetch success (attempt ${i + 1})`);
       let html = await res.text();
       html = rewriteHTML(html, url);
       contentDiv.innerHTML = html;
       reinjectScripts(contentDiv);
       showLoading(false);
+      logDebug(`Finished loading: ${url}`);
       return;
     } catch (err) {
-      console.warn(`Proxy attempt ${i} failed:`, err);
+      logDebug(`Attempt ${i + 1} failed: ${err.message}`, "warn");
       if (i === proxies.length - 1) {
         contentDiv.innerHTML = `⚠️ Error loading URL: ${err.message}`;
         showLoading(false);
+        logDebug(`All fetch attempts failed`, "error");
       }
     }
   }
@@ -114,7 +131,7 @@ window.addEventListener("load", () => {
   if (target) loadProxiedSite(target);
 });
 
-// Handle hash change (back/forward buttons)
+// Handle hash change
 window.addEventListener("hashchange", () => {
   const target = getTargetURL();
   if (target) loadProxiedSite(target);
