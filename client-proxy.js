@@ -1,4 +1,4 @@
-const contentDiv = document.getElementById("content");
+const proxyIframe = document.getElementById("proxyIframe");
 const debugLogs = document.getElementById("debugLogs");
 
 // Utility: parse URL from hash
@@ -12,9 +12,12 @@ function logDebug(message, type = "info") {
   if (!debugLogs) return;
   const li = document.createElement("li");
   li.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-  li.style.color = type === "error" ? "red" : type === "warn" ? "orange" : "black";
+  li.style.color =
+    type === "error" ? "red" :
+    type === "warn" ? "orange" : "black";
   debugLogs.appendChild(li);
   debugLogs.scrollTop = debugLogs.scrollHeight;
+  console.log(message);
 }
 
 // Rewrite HTML: fix links, forms, assets
@@ -68,23 +71,19 @@ function rewriteHTML(html, baseURL) {
   return doc.documentElement.innerHTML;
 }
 
-// Re-inject <script> tags
-function reinjectScripts(container) {
-  container.querySelectorAll("script").forEach(oldScript => {
-    const newScript = document.createElement("script");
-    if (oldScript.src) {
-      newScript.src = oldScript.src;
-      newScript.async = false;
-    } else {
-      newScript.textContent = oldScript.textContent;
-    }
-    oldScript.replaceWith(newScript);
-  });
+// Inject HTML into iframe
+function setIframeContent(html) {
+  const doc = proxyIframe.contentDocument || proxyIframe.contentWindow.document;
+  doc.open();
+  doc.write(html);
+  doc.close();
 }
 
-// Show loading spinner
+// Show loading spinner (inside iframe)
 function showLoading(show = true) {
-  contentDiv.innerHTML = show ? "🔄 Loading..." : "";
+  if (show) {
+    setIframeContent("<p style='font-family: sans-serif;'>🔄 Loading...</p>");
+  }
 }
 
 // Load site inside proxy with debug + fallback
@@ -109,16 +108,13 @@ async function loadProxiedSite(url) {
       logDebug(`Fetch success (attempt ${i + 1})`);
       let html = await res.text();
       html = rewriteHTML(html, url);
-      contentDiv.innerHTML = html;
-      reinjectScripts(contentDiv);
-      showLoading(false);
+      setIframeContent(html);
       logDebug(`Finished loading: ${url}`);
       return;
     } catch (err) {
       logDebug(`Attempt ${i + 1} failed: ${err.message}`, "warn");
       if (i === proxies.length - 1) {
-        contentDiv.innerHTML = `⚠️ Error loading URL: ${err.message}`;
-        showLoading(false);
+        setIframeContent(`<p style="color:red;">⚠️ Error loading URL: ${err.message}</p>`);
         logDebug(`All fetch attempts failed`, "error");
       }
     }
