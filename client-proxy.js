@@ -48,9 +48,7 @@ function rewriteHTML(html, baseURL) {
       const data = new FormData(f);
       const query = new URLSearchParams(data).toString();
 
-      if (abs.includes("google.")) {
-        abs += (abs.includes("?") ? "&" : "?") + query;
-      } else if (f.method.toLowerCase() === "get") {
+      if (f.method.toLowerCase() === "get") {
         abs += (abs.includes("?") ? "&" : "?") + query;
       }
 
@@ -59,7 +57,7 @@ function rewriteHTML(html, baseURL) {
     });
   });
 
-  // Rewrite assets (CSS, JS, images)
+  // Rewrite assets
   doc.querySelectorAll("link, script, img").forEach(tag => {
     const attr = tag.tagName.toLowerCase() === "link" ? "href" : "src";
     const val = tag.getAttribute(attr);
@@ -68,7 +66,7 @@ function rewriteHTML(html, baseURL) {
     }
   });
 
-  return doc.documentElement.innerHTML;
+  return "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
 }
 
 // Inject HTML into iframe
@@ -79,14 +77,14 @@ function setIframeContent(html) {
   doc.close();
 }
 
-// Show loading spinner (inside iframe)
+// Show loading spinner
 function showLoading(show = true) {
   if (show) {
     setIframeContent("<p style='font-family: sans-serif;'>🔄 Loading...</p>");
   }
 }
 
-// Load site inside proxy with debug + fallback
+// Load site inside proxy
 async function loadProxiedSite(url) {
   showLoading(true);
   logDebug(`Starting load: ${url}`);
