@@ -19,14 +19,19 @@
 
   <div id="loadingSpinner"></div>
 
-  <div id="iframe-container" style="display: flex; width: 100%; height: 85vh; gap: 10px;">
-    <iframe
-      id="proxyIframe"
-      style="flex: 3; border: none;"
-      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-    ></iframe>
+  <!-- Two-column layout: iframe (left) + debug (right) -->
+  <div style="display: flex; width: 100%; height: 85vh; gap: 10px;">
+    
+    <!-- Proxy iframe (big) -->
+    <div style="flex: 3; border: 1px solid #dcdcdc; border-radius: 8px; overflow: hidden;">
+      <iframe
+        id="proxyIframe"
+        style="width: 100%; height: 100%; border: none;"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+      ></iframe>
+    </div>
 
-    <!-- Debug panel -->
+    <!-- Debug panel (always visible, separate) -->
     <div id="debugPanel" style="flex: 1; background: #f8f8f8; border: 1px solid #dcdcdc; border-radius: 8px; padding: 10px; overflow-y: auto; font-size: 12px;">
       <strong>Debug Panel</strong>
       <ul id="debugLogs"></ul>
@@ -35,7 +40,7 @@
 
   <div id="info-section">
     <p>
-      <strong>Roogle V3 Version (debug):</strong> 3.1
+      <strong>Roogle V3 Version:</strong> 3.0
     </p>
   </div>
 
