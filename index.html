@@ -32,11 +32,46 @@
     </div>
 
     <!-- Debug panel (always visible, separate) -->
-    <div id="debugPanel" style="flex: 1; background: #f8f8f8; border: 1px solid #dcdcdc; border-radius: 8px; padding: 10px; overflow-y: auto; font-size: 12px;">
-      <strong>Debug Panel</strong>
+    <body>
+  <div id="app">
+    <div id="iframe-container">
+      <iframe id="proxyIframe"></iframe>
+    </div>
+    <div id="debug-panel">
+      <h3>Debug Logs</h3>
       <ul id="debugLogs"></ul>
     </div>
   </div>
+</body>
+
+<style>
+  #app {
+    display: flex;
+    height: 100vh;
+  }
+  #iframe-container {
+    flex: 3;
+  }
+  #proxyIframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+  #debug-panel {
+    flex: 1;
+    border-left: 1px solid #ccc;
+    background: #f9f9f9;
+    overflow-y: auto;
+    padding: 10px;
+    font-family: monospace;
+  }
+  #debugLogs {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+</style>
+
 
   <div id="info-section">
     <p>
