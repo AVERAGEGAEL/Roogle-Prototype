@@ -7,21 +7,21 @@ const form = document.getElementById("proxyForm");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
 const lastUpdatedElement = document.getElementById("last-updated");
 
-// Headless backend URL (Render / Fly.io etc.)
+// Headless backend URL
 const headlessBackend = 'https://roogle-v3-backend.onrender.com/?url=';
 
-// Lightweight iframe fallback URL (Cloudflare Worker UV if you want)
+// Lightweight iframe fallback URL
 const iframeFallback = '';
 
 // Sites that require special handling
-const clientProxySites = ["google.com", "youtube.com"]; // handled by client-proxy.js
-const headlessSites = ["poki.com","retrogames.cc","coolmathgames.com"]; // handled by backend
+const clientProxySites = ["google.com", "youtube.com"];
+const headlessSites = ["poki.com","retrogames.cc","coolmathgames.com"];
 
 // -------------------- UTILS --------------------
 function isValidURL(str) {
   try {
     const url = new URL(str.startsWith("http") ? str : "https://" + str);
-    return url.hostname.includes(".") && !url.hostname.includes(" ");
+    return url.hostname.includes(".");
   } catch {
     return false;
   }
@@ -60,7 +60,6 @@ form.addEventListener("submit", async (e) => {
   showSpinner(true);
 
   if (needsClientProxy(urlInput)) {
-    // Use client proxy (UV-lite)
     loadClientProxy(urlInput);
     return;
   }
@@ -97,6 +96,6 @@ fullscreenBtn.addEventListener("click", () => {
 // -------------------- CLIENT PROXY HANDLER --------------------
 function loadClientProxy(url) {
   showSpinner(true);
-  iframe.src = "client-proxy.html#url=" + encodeURIComponent(url); 
+  iframe.src = "client-proxy.html#url=" + encodeURIComponent(url);
   iframe.onload = () => showSpinner(false);
 }
