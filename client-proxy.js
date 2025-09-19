@@ -1,6 +1,8 @@
 const proxyIframe = document.getElementById("proxyIframe");
 const debugLogs = document.getElementById("debugLogs");
 
+// ------------------ UTILS ------------------
+
 // Utility: parse URL from hash
 function getTargetURL() {
   const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -19,6 +21,8 @@ function logDebug(message, type = "info") {
   debugLogs.scrollTop = debugLogs.scrollHeight;
   console.log(message);
 }
+
+// ------------------ REWRITERS ------------------
 
 // Rewrite HTML: fix links, forms, assets
 function rewriteHTML(html, baseURL) {
@@ -57,7 +61,7 @@ function rewriteHTML(html, baseURL) {
     });
   });
 
-  // Rewrite assets
+  // Rewrite assets (link/script/img)
   doc.querySelectorAll("link, script, img").forEach(tag => {
     const attr = tag.tagName.toLowerCase() === "link" ? "href" : "src";
     const val = tag.getAttribute(attr);
@@ -69,15 +73,34 @@ function rewriteHTML(html, baseURL) {
   return "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
 }
 
-// Inject HTML into iframe
+// Inject HTML into iframe + reinject scripts
 function setIframeContent(html) {
   const doc = proxyIframe.contentDocument || proxyIframe.contentWindow.document;
   doc.open();
   doc.write(html);
   doc.close();
+
+  reinjectScripts(doc);
 }
 
-// Show loading spinner
+// Reinject <script> tags to force execution
+function reinjectScripts(doc) {
+  const scripts = doc.querySelectorAll("script");
+  scripts.forEach(oldScript => {
+    const newScript = document.createElement("script");
+    if (oldScript.src) {
+      newScript.src = oldScript.src;
+      newScript.async = false;
+    } else {
+      newScript.textContent = oldScript.textContent;
+    }
+    oldScript.replaceWith(newScript);
+  });
+  logDebug(`Reinjected ${scripts.length} script(s)`);
+}
+
+// ------------------ LOADING ------------------
+
 function showLoading(show = true) {
   if (show) {
     setIframeContent("<p style='font-family: sans-serif;'>🔄 Loading...</p>");
@@ -89,10 +112,11 @@ async function loadProxiedSite(url) {
   showLoading(true);
   logDebug(`Starting load: ${url}`);
 
+  // Put CORS-free proxies first
   const proxies = [
-    null, // direct fetch
     "https://api.allorigins.win/raw?url=",
-    "https://corsproxy.io/?"
+    "https://corsproxy.io/?",
+    null // direct fetch last
   ];
 
   for (let i = 0; i < proxies.length; i++) {
@@ -119,13 +143,13 @@ async function loadProxiedSite(url) {
   }
 }
 
-// Initial load
+// ------------------ INIT ------------------
+
 window.addEventListener("load", () => {
   const target = getTargetURL();
   if (target) loadProxiedSite(target);
 });
 
-// Handle hash change
 window.addEventListener("hashchange", () => {
   const target = getTargetURL();
   if (target) loadProxiedSite(target);
