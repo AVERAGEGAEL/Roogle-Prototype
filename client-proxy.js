@@ -3,7 +3,6 @@ const debugLogs = document.getElementById("debugLogs");
 
 // ------------------ UTILS ------------------
 
-// Utility: parse URL from hash
 function getTargetURL() {
   const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   return params.get("url");
@@ -24,7 +23,6 @@ function logDebug(message, type = "info") {
 
 // ------------------ REWRITERS ------------------
 
-// Rewrite HTML: fix links, forms, assets
 function rewriteHTML(html, baseURL) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
@@ -73,7 +71,8 @@ function rewriteHTML(html, baseURL) {
   return "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
 }
 
-// Inject HTML into iframe + reinject scripts
+// ------------------ IFRAME HELPERS ------------------
+
 function setIframeContent(html) {
   const doc = proxyIframe.contentDocument || proxyIframe.contentWindow.document;
   doc.open();
@@ -81,9 +80,9 @@ function setIframeContent(html) {
   doc.close();
 
   reinjectScripts(doc);
+  attachDebugHooks();
 }
 
-// Reinject <script> tags to force execution
 function reinjectScripts(doc) {
   const scripts = doc.querySelectorAll("script");
   scripts.forEach(oldScript => {
@@ -99,6 +98,33 @@ function reinjectScripts(doc) {
   logDebug(`Reinjected ${scripts.length} script(s)`);
 }
 
+// Attach debug listeners inside iframe
+function attachDebugHooks() {
+  const win = proxyIframe.contentWindow;
+  if (!win) return;
+
+  // Forward console logs
+  ["log", "warn", "error"].forEach(level => {
+    const orig = win.console[level];
+    win.console[level] = (...args) => {
+      logDebug(`[iframe ${level}] ${args.join(" ")}`, level === "warn" ? "warn" : (level === "error" ? "error" : "info"));
+      orig.apply(win.console, args);
+    };
+  });
+
+  // Catch runtime errors
+  win.addEventListener("error", e => {
+    logDebug(`[iframe error] ${e.message} at ${e.filename}:${e.lineno}`, "error");
+  });
+
+  // Catch unhandled promise rejections
+  win.addEventListener("unhandledrejection", e => {
+    logDebug(`[iframe rejection] ${e.reason}`, "error");
+  });
+
+  logDebug("Debug hooks attached to iframe");
+}
+
 // ------------------ LOADING ------------------
 
 function showLoading(show = true) {
@@ -107,16 +133,14 @@ function showLoading(show = true) {
   }
 }
 
-// Load site inside proxy
 async function loadProxiedSite(url) {
   showLoading(true);
   logDebug(`Starting load: ${url}`);
 
-  // Put CORS-free proxies first
   const proxies = [
     "https://api.allorigins.win/raw?url=",
     "https://corsproxy.io/?",
-    null // direct fetch last
+    null
   ];
 
   for (let i = 0; i < proxies.length; i++) {
