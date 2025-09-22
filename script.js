@@ -6,13 +6,12 @@ const searchBox = document.getElementById("url");
 const form = document.getElementById("proxyForm");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
 const lastUpdatedElement = document.getElementById("last-updated");
+const debugLogs = document.getElementById("debugLogs");
 
 // Headless backend URL
 const headlessBackend = 'https://roogle-v3-backend.onrender.com/?url=';
-
 // Lightweight iframe fallback URL
 const iframeFallback = '';
-
 // Sites that require special handling
 const clientProxySites = ["google.com", "youtube.com"];
 const headlessSites = ["poki.com","retrogames.cc","coolmathgames.com"];
@@ -37,6 +36,16 @@ function needsHeadless(url) {
 
 function showSpinner(show = true) {
   loadingSpinner.style.display = show ? "block" : "none";
+}
+
+function logDebug(message, type = "info") {
+  if (!debugLogs) return;
+  const p = document.createElement("p");
+  p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+  p.style.color = type === "error" ? "red" : type === "warn" ? "orange" : "black";
+  debugLogs.appendChild(p);
+  debugLogs.scrollTop = debugLogs.scrollHeight;
+  console.log(message);
 }
 
 // -------------------- MAIN --------------------
@@ -85,7 +94,7 @@ form.addEventListener("submit", async (e) => {
 // -------------------- FULLSCREEN --------------------
 fullscreenBtn.addEventListener("click", () => {
   if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen().catch(err => {
+    iframe.requestFullscreen().catch(err => {
       alert(`Error attempting to enable fullscreen: ${err.message}`);
     });
   } else {
@@ -99,3 +108,11 @@ function loadClientProxy(url) {
   iframe.src = "client-proxy.html#url=" + encodeURIComponent(url);
   iframe.onload = () => showSpinner(false);
 }
+
+// -------------------- MESSAGE HANDLER --------------------
+// Forward debug logs from client-proxy iframe
+window.addEventListener("message", (event) => {
+  if (event.data?.type === "debugLog") {
+    logDebug(event.data.message, event.data.level);
+  }
+});
