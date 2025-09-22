@@ -11,13 +11,15 @@ function getTargetURL() {
 // Log message to debug panel
 function logDebug(message, type = "info") {
   if (!debugLogs) return;
-  const li = document.createElement("li");
-  li.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-  li.style.color =
+
+  const p = document.createElement("p"); // use <p> instead of <li>
+  p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+  p.style.color =
     type === "error" ? "red" :
     type === "warn" ? "orange" : "black";
-  debugLogs.appendChild(li);
-  debugLogs.scrollTop = debugLogs.scrollHeight;
+  debugLogs.appendChild(p);
+
+  debugLogs.scrollTop = debugLogs.scrollHeight; // auto-scroll
   console.log(message);
 }
 
@@ -107,7 +109,8 @@ function attachDebugHooks() {
   ["log", "warn", "error"].forEach(level => {
     const orig = win.console[level];
     win.console[level] = (...args) => {
-      logDebug(`[iframe ${level}] ${args.join(" ")}`, level === "warn" ? "warn" : (level === "error" ? "error" : "info"));
+      logDebug(`[iframe ${level}] ${args.join(" ")}`, 
+        level === "warn" ? "warn" : (level === "error" ? "error" : "info"));
       orig.apply(win.console, args);
     };
   });
