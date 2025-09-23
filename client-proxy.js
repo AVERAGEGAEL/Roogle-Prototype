@@ -10,17 +10,25 @@ function getTargetURL() {
 
 // Log message to debug panel
 function logDebug(message, type = "info") {
-  if (!debugLogs) return;
+  if (debugLogs) {
+    const p = document.createElement("p"); // use <p> instead of <li>
+    p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    p.style.color =
+      type === "error" ? "red" :
+      type === "warn" ? "orange" : "black";
+    debugLogs.appendChild(p);
 
-  const p = document.createElement("p"); // use <p> instead of <li>
-  p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-  p.style.color =
-    type === "error" ? "red" :
-    type === "warn" ? "orange" : "black";
-  debugLogs.appendChild(p);
+    debugLogs.scrollTop = debugLogs.scrollHeight; // auto-scroll
+  }
 
-  debugLogs.scrollTop = debugLogs.scrollHeight; // auto-scroll
   console.log(message);
+
+  // Forward to parent page (main debug panel)
+  try {
+    window.parent.postMessage({ type: "debugLog", message, level: type }, "*");
+  } catch (e) {
+    console.warn("Failed to postMessage log:", e);
+  }
 }
 
 // ------------------ REWRITERS ------------------
