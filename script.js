@@ -5,16 +5,13 @@ const loadingSpinner = document.getElementById("loadingSpinner");
 const searchBox = document.getElementById("url");
 const form = document.getElementById("proxyForm");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
-const lastUpdatedElement = document.getElementById("last-updated");
 const debugLogs = document.getElementById("debugLogs");
 
-// Headless backend URL
-const headlessBackend = 'https://roogle-v3-backend.onrender.com/?url=';
 // Lightweight iframe fallback URL
 const iframeFallback = '';
 // Sites that require special handling
 const clientProxySites = ["google.com", "youtube.com"];
-const headlessSites = ["poki.com","retrogames.cc","coolmathgames.com"];
+const blockedSites = ["poki.com", "retrogames.cc", "coolmathgames.com"];
 
 // -------------------- UTILS --------------------
 function isValidURL(str) {
@@ -30,8 +27,8 @@ function needsClientProxy(url) {
   return clientProxySites.some(site => new URL(url).hostname.includes(site));
 }
 
-function needsHeadless(url) {
-  return headlessSites.some(site => new URL(url).hostname.includes(site));
+function needsBlockedHandling(url) {
+  return blockedSites.some(site => new URL(url).hostname.includes(site));
 }
 
 function showSpinner(show = true) {
@@ -49,13 +46,11 @@ function logDebug(message, type = "info") {
 }
 
 // -------------------- MAIN --------------------
-document.addEventListener("DOMContentLoaded", () => {
-  lastUpdatedElement.textContent = `${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`;
-});
-
 // Handle form submission
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
+  e.stopPropagation();
+
   let urlInput = searchBox.value.trim();
 
   if (!urlInput) return alert("Please enter a URL.");
@@ -73,21 +68,22 @@ form.addEventListener("submit", async (e) => {
     return;
   }
 
-  let proxyUrl = needsHeadless(urlInput)
-    ? headlessBackend + encodeURIComponent(urlInput)
-    : (iframeFallback ? iframeFallback + encodeURIComponent(urlInput) : urlInput);
+  if (needsBlockedHandling(urlInput)) {
+    alert("This site cannot be proxied reliably.");
+    showSpinner(false);
+    return;
+  }
+
+  let proxyUrl = iframeFallback
+    ? iframeFallback + encodeURIComponent(urlInput)
+    : urlInput;
 
   iframe.src = proxyUrl;
 
   iframe.onload = () => showSpinner(false);
   iframe.onerror = () => {
     showSpinner(false);
-    if (!needsHeadless(urlInput) && headlessBackend) {
-      iframe.src = headlessBackend + encodeURIComponent(urlInput);
-      showSpinner(true);
-    } else {
-      alert("Unable to load the site fully. Try opening in a normal browser.");
-    }
+    alert("Unable to load the site fully. Try opening in a normal browser.");
   };
 });
 
