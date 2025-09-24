@@ -1,5 +1,8 @@
-const proxyIframe = document.getElementById("proxyIframe");
-const debugLogs = document.getElementById("debugLogs");
+// ------------------ GLOBALS ------------------
+
+// Inside client-proxy.html, the document itself is the render target
+const proxyIframe = document.getElementById("proxyIframe"); // fallback if you actually include one
+const debugLogs = document.getElementById("debugLogs"); // usually null, logs go to parent
 
 // ------------------ UTILS ------------------
 
@@ -8,22 +11,20 @@ function getTargetURL() {
   return params.get("url");
 }
 
-// Log message to debug panel
+// Log message to debug panel + forward to parent
 function logDebug(message, type = "info") {
   if (debugLogs) {
-    const p = document.createElement("p"); // use <p> instead of <li>
+    const p = document.createElement("p");
     p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
     p.style.color =
       type === "error" ? "red" :
       type === "warn" ? "orange" : "black";
     debugLogs.appendChild(p);
-
-    debugLogs.scrollTop = debugLogs.scrollHeight; // auto-scroll
+    debugLogs.scrollTop = debugLogs.scrollHeight;
   }
 
   console.log(message);
 
-  // Forward to parent page (main debug panel)
   try {
     window.parent.postMessage({ type: "debugLog", message, level: type }, "*");
   } catch (e) {
@@ -42,7 +43,7 @@ function rewriteHTML(html, baseURL) {
     const href = a.getAttribute("href");
     if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
       const abs = new URL(href, baseURL).href;
-      a.setAttribute("href", "#" + "url=" + encodeURIComponent(abs));
+      a.setAttribute("href", "#url=" + encodeURIComponent(abs));
       a.addEventListener("click", e => {
         e.preventDefault();
         loadProxiedSite(abs);
@@ -60,7 +61,7 @@ function rewriteHTML(html, baseURL) {
       const data = new FormData(f);
       const query = new URLSearchParams(data).toString();
 
-      if (f.method.toLowerCase() === "get") {
+      if (f.method?.toLowerCase() === "get") {
         abs += (abs.includes("?") ? "&" : "?") + query;
       }
 
@@ -73,7 +74,8 @@ function rewriteHTML(html, baseURL) {
   doc.querySelectorAll("link, script, img").forEach(tag => {
     const attr = tag.tagName.toLowerCase() === "link" ? "href" : "src";
     const val = tag.getAttribute(attr);
-    if (val && !val.startsWith("http") && !val.startsWith("data:")) {
+
+    if (val && !/^https?:|^data:|^\/\//i.test(val)) {
       tag.setAttribute(attr, new URL(val, baseURL).href);
     }
   });
@@ -84,7 +86,10 @@ function rewriteHTML(html, baseURL) {
 // ------------------ IFRAME HELPERS ------------------
 
 function setIframeContent(html) {
-  const doc = proxyIframe.contentDocument || proxyIframe.contentWindow.document;
+  const doc = proxyIframe
+    ? proxyIframe.contentDocument || proxyIframe.contentWindow.document
+    : document;
+
   doc.open();
   doc.write(html);
   doc.close();
@@ -94,7 +99,7 @@ function setIframeContent(html) {
 }
 
 function reinjectScripts(doc) {
-  const scripts = doc.querySelectorAll("script");
+  const scripts = Array.from(doc.querySelectorAll("script"));
   scripts.forEach(oldScript => {
     const newScript = document.createElement("script");
     if (oldScript.src) {
@@ -110,25 +115,22 @@ function reinjectScripts(doc) {
 
 // Attach debug listeners inside iframe
 function attachDebugHooks() {
-  const win = proxyIframe.contentWindow;
+  const win = proxyIframe ? proxyIframe.contentWindow : window;
   if (!win) return;
 
-  // Forward console logs
   ["log", "warn", "error"].forEach(level => {
     const orig = win.console[level];
     win.console[level] = (...args) => {
-      logDebug(`[iframe ${level}] ${args.join(" ")}`, 
+      logDebug(`[iframe ${level}] ${args.join(" ")}`,
         level === "warn" ? "warn" : (level === "error" ? "error" : "info"));
       orig.apply(win.console, args);
     };
   });
 
-  // Catch runtime errors
   win.addEventListener("error", e => {
     logDebug(`[iframe error] ${e.message} at ${e.filename}:${e.lineno}`, "error");
   });
 
-  // Catch unhandled promise rejections
   win.addEventListener("unhandledrejection", e => {
     logDebug(`[iframe rejection] ${e.reason}`, "error");
   });
