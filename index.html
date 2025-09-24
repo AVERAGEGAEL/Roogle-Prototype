@@ -7,7 +7,6 @@
   <link rel="icon" type="image/png" href="Google.png" />
   <link rel="stylesheet" href="styles.css" />
   <style>
-    /* Inline styles for debug layout fix */
     #app {
       display: flex;
       height: 85vh;
@@ -44,7 +43,7 @@
   <h1>Roogle V3 Prototype</h1>
 
   <!-- Main search / URL form -->
-  <form id="proxyForm">
+  <form id="proxyForm" onsubmit="return false;">
     <input type="text" id="url" placeholder="Enter a URL..." required />
     <button type="submit">Go</button>
     <button type="button" id="fullscreen-btn" title="Toggle Fullscreen">⛶</button>
@@ -67,10 +66,10 @@
   </div>
 
   <div id="info-section">
-    <p><strong>Roogle V3 Version:</strong> 3.2.3</p>
+    <p><strong>Roogle V3 Version:</strong> 3.2.4</p>
   </div>
 
-  <script src="client-proxy.js"></script>
+  <!-- Only script.js here -->
   <script src="script.js"></script>
 </body>
 </html>
