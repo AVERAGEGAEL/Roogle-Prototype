@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Client Proxy</title>
   <style>
     body {
       margin: 0;
@@ -43,12 +42,27 @@
   </style>
 </head>
 <body>
-  <div id="loadingMessage">🔄 Loading site...</div>
+  <div id="loadingMessage">🔄 Loading site... (0s)</div>
   <div id="loadingSpinner"></div>
   <div id="timeoutMessage">
     ⏳ This is taking longer than usual.<br>
-    Maybe wait a bit, or try again later.
+    You may wait a bit, or try again later.
   </div>
+  <script>
+    // Simple UI timer (works with your client-proxy.js)
+    let elapsed = 0;
+    const msg = document.getElementById("loadingMessage");
+    const timeoutMsg = document.getElementById("timeoutMessage");
+
+    const timer = setInterval(() => {
+      elapsed++;
+      msg.textContent = `🔄 Loading site... (${elapsed}s)`;
+      if (elapsed >= 30) {
+        timeoutMsg.style.display = "block";
+        clearInterval(timer);
+      }
+    }, 1000);
+  </script>
   <script src="client-proxy.js"></script>
 </body>
 </html>
