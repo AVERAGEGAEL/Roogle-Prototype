@@ -56,6 +56,22 @@
       max-width: 80%;
     }
 
+    /* Close button */
+    #closeOverlay {
+      margin-top: 20px;
+      padding: 6px 12px;
+      font-size: 14px;
+      border: none;
+      border-radius: 4px;
+      background: #d33;
+      color: white;
+      cursor: pointer;
+    }
+
+    #closeOverlay:hover {
+      background: #b22;
+    }
+
     /* Proxied iframe (fills page under overlay) */
     #proxyIframe {
       width: 100%;
@@ -89,6 +105,7 @@
       ⏳ This is taking longer than usual.<br>
       You may wait a bit, or try again later.
     </div>
+    <button id="closeOverlay">❌ Dismiss</button>
   </div>
 
   <!-- Proxied site -->
@@ -112,12 +129,18 @@
       }
     }, 1000);
 
-    // Let client-proxy.js hide overlay when ready
+    // Auto-hide overlay when client-proxy.js tells us
     window.addEventListener("message", (e) => {
       if (e.data?.type === "hideLoading") {
         overlay.style.display = "none";
         clearInterval(timer);
       }
+    });
+
+    // Manual close button
+    document.getElementById("closeOverlay").addEventListener("click", () => {
+      overlay.style.display = "none";
+      clearInterval(timer);
     });
   </script>
 
