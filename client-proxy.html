@@ -8,17 +8,31 @@
       padding: 0;
       font-family: sans-serif;
       background: #fff;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Overlay that covers the whole viewport */
+    #loadingOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.95);
       display: flex;
+      flex-direction: column;
       justify-content: center;
       align-items: center;
-      height: 100vh;
-      flex-direction: column;
+      z-index: 9999;
     }
+
     #loadingMessage {
       font-size: 18px;
       color: #333;
       margin-bottom: 15px;
     }
+
     #loadingSpinner {
       border: 6px solid #f3f3f3;
       border-top: 6px solid #4285f4;
@@ -27,10 +41,12 @@
       height: 55px;
       animation: spin 1s linear infinite;
     }
+
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+
     #timeoutMessage {
       display: none;
       margin-top: 20px;
@@ -39,30 +55,72 @@
       text-align: center;
       max-width: 80%;
     }
+
+    /* Proxied iframe (fills page under overlay) */
+    #proxyIframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    /* Debug log panel (optional) */
+    #debugLogs {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      max-height: 200px;
+      overflow-y: auto;
+      background: rgba(0, 0, 0, 0.05);
+      font-family: monospace;
+      font-size: 12px;
+      padding: 5px;
+      box-sizing: border-box;
+      z-index: 10000;
+    }
   </style>
 </head>
 <body>
-  <div id="loadingMessage">🔄 Loading site... (0s)</div>
-  <div id="loadingSpinner"></div>
-  <div id="timeoutMessage">
-    ⏳ This is taking longer than usual.<br>
-    You may wait a bit, or try again later.
+  <!-- Loading overlay -->
+  <div id="loadingOverlay">
+    <div id="loadingMessage">🔄 Loading site... (0s)</div>
+    <div id="loadingSpinner"></div>
+    <div id="timeoutMessage">
+      ⏳ This is taking longer than usual.<br>
+      You may wait a bit, or try again later.
+    </div>
   </div>
+
+  <!-- Proxied site -->
+  <iframe id="proxyIframe"></iframe>
+
+  <!-- Logs -->
+  <div id="debugLogs"></div>
+
   <script>
-    // Simple UI timer (works with your client-proxy.js)
+    // Timer for loading overlay
     let elapsed = 0;
     const msg = document.getElementById("loadingMessage");
     const timeoutMsg = document.getElementById("timeoutMessage");
+    const overlay = document.getElementById("loadingOverlay");
 
     const timer = setInterval(() => {
       elapsed++;
       msg.textContent = `🔄 Loading site... (${elapsed}s)`;
       if (elapsed >= 30) {
         timeoutMsg.style.display = "block";
-        clearInterval(timer);
       }
     }, 1000);
+
+    // Let client-proxy.js hide overlay when ready
+    window.addEventListener("message", (e) => {
+      if (e.data?.type === "hideLoading") {
+        overlay.style.display = "none";
+        clearInterval(timer);
+      }
+    });
   </script>
+
   <script src="client-proxy.js"></script>
 </body>
 </html>
