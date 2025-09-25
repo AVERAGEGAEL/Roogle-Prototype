@@ -1,8 +1,7 @@
 // ------------------ GLOBALS ------------------
 
-// Inside client-proxy.html, the document itself is the render target
-const proxyIframe = document.getElementById("proxyIframe"); // fallback if you actually include one
-const debugLogs = document.getElementById("debugLogs"); // usually null, logs go to parent
+const proxyIframe = document.getElementById("proxyIframe");
+const debugLogs = document.getElementById("debugLogs");
 let loadTimer = null;
 
 // ------------------ UTILS ------------------
@@ -12,7 +11,6 @@ function getTargetURL() {
   return params.get("url");
 }
 
-// Log message to debug panel + forward to parent
 function logDebug(message, type = "info") {
   if (debugLogs) {
     const p = document.createElement("p");
@@ -39,7 +37,6 @@ function rewriteHTML(html, baseURL) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
 
-  // Rewrite <a> tags
   doc.querySelectorAll("a").forEach(a => {
     const href = a.getAttribute("href");
     if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
@@ -52,7 +49,6 @@ function rewriteHTML(html, baseURL) {
     }
   });
 
-  // Rewrite forms
   doc.querySelectorAll("form").forEach(f => {
     f.addEventListener("submit", e => {
       e.preventDefault();
@@ -71,7 +67,6 @@ function rewriteHTML(html, baseURL) {
     });
   });
 
-  // Rewrite assets (link/script/img)
   doc.querySelectorAll("link, script, img").forEach(tag => {
     const attr = tag.tagName.toLowerCase() === "link" ? "href" : "src";
     const val = tag.getAttribute(attr);
@@ -116,7 +111,6 @@ function reinjectScripts(doc) {
   logDebug(`Reinjected ${scripts.length} script(s)`);
 }
 
-// Attach debug listeners inside iframe
 function attachDebugHooks() {
   const win = proxyIframe ? proxyIframe.contentWindow : window;
   if (!win) return;
@@ -144,8 +138,11 @@ function attachDebugHooks() {
 // ------------------ LOADING ------------------
 
 function showLoading(show = true) {
-  if (show) {
-    setIframeContent("<p style='font-family: sans-serif;'>🔄 Loading...</p>");
+  const msg = document.getElementById("loadingMessage");
+  const spinner = document.getElementById("loadingSpinner");
+  if (msg && spinner) {
+    msg.textContent = "🔄 Loading site... (0s)";
+    spinner.style.display = show ? "block" : "none";
   }
 }
 
@@ -165,6 +162,9 @@ function startLoadTimer(url) {
 }
 
 async function loadProxiedSite(url) {
+  // 🔹 Clear debug logs for each new load
+  if (debugLogs) debugLogs.innerHTML = "";
+
   showLoading(true);
   logDebug(`Starting load: ${url}`);
   startLoadTimer(url);
