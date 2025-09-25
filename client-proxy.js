@@ -188,6 +188,10 @@ async function loadProxiedSite(url) {
       html = rewriteHTML(html, url);
       setIframeContent(html);
       logDebug(`Finished loading: ${url}`);
+
+      // 🔹 Tell overlay to hide
+      window.postMessage({ type: "hideLoading" }, "*");
+
       clearInterval(loadTimer);
       return;
     } catch (err) {
