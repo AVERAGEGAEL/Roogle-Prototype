@@ -3,6 +3,7 @@
 // Inside client-proxy.html, the document itself is the render target
 const proxyIframe = document.getElementById("proxyIframe"); // fallback if you actually include one
 const debugLogs = document.getElementById("debugLogs"); // usually null, logs go to parent
+let loadTimer = null;
 
 // ------------------ UTILS ------------------
 
@@ -80,6 +81,7 @@ function rewriteHTML(html, baseURL) {
     }
   });
 
+  logDebug("HTML rewrite complete");
   return "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
 }
 
@@ -93,6 +95,7 @@ function setIframeContent(html) {
   doc.open();
   doc.write(html);
   doc.close();
+  logDebug("Content injected into iframe");
 
   reinjectScripts(doc);
   attachDebugHooks();
@@ -146,9 +149,25 @@ function showLoading(show = true) {
   }
 }
 
+function startLoadTimer(url) {
+  clearInterval(loadTimer);
+  let elapsed = 0;
+  loadTimer = setInterval(() => {
+    elapsed += 5;
+    if (elapsed === 15) {
+      logDebug(`⏳ Still loading ${url}... (15s elapsed)`, "warn");
+    }
+    if (elapsed === 30) {
+      logDebug(`⚠️ Load taking too long (30s). You may retry.`, "error");
+      clearInterval(loadTimer);
+    }
+  }, 5000);
+}
+
 async function loadProxiedSite(url) {
   showLoading(true);
   logDebug(`Starting load: ${url}`);
+  startLoadTimer(url);
 
   const proxies = [
     "https://api.allorigins.win/raw?url=",
@@ -169,12 +188,14 @@ async function loadProxiedSite(url) {
       html = rewriteHTML(html, url);
       setIframeContent(html);
       logDebug(`Finished loading: ${url}`);
+      clearInterval(loadTimer);
       return;
     } catch (err) {
       logDebug(`Attempt ${i + 1} failed: ${err.message}`, "warn");
       if (i === proxies.length - 1) {
         setIframeContent(`<p style="color:red;">⚠️ Error loading URL: ${err.message}</p>`);
         logDebug(`All fetch attempts failed`, "error");
+        clearInterval(loadTimer);
       }
     }
   }
