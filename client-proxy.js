@@ -37,6 +37,7 @@ function rewriteHTML(html, baseURL) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
 
+  // Fix relative paths
   doc.querySelectorAll("a").forEach(a => {
     const href = a.getAttribute("href");
     if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
@@ -67,10 +68,10 @@ function rewriteHTML(html, baseURL) {
     });
   });
 
+  // Fix static assets
   doc.querySelectorAll("link, script, img").forEach(tag => {
     const attr = tag.tagName.toLowerCase() === "link" ? "href" : "src";
     const val = tag.getAttribute(attr);
-
     if (val && !/^https?:|^data:|^\/\//i.test(val)) {
       tag.setAttribute(attr, new URL(val, baseURL).href);
     }
@@ -115,16 +116,13 @@ function attachDebugHooks() {
   const win = proxyIframe ? proxyIframe.contentWindow : window;
   if (!win) return;
 
-  // Prevent logs from printing inside iframe’s visible console
+  // prevent iframe console echo
   ["log", "warn", "error"].forEach(level => {
     const orig = win.console[level];
     win.console[level] = (...args) => {
-      // only send to parent log, not inside iframe DOM
       logDebug(`[iframe ${level}] ${args.join(" ")}`,
         level === "warn" ? "warn" : (level === "error" ? "error" : "info"));
-      try {
-        orig.apply(win.console, []); // no arguments — block iframe from echoing
-      } catch {}
+      try { orig.apply(win.console, []); } catch {}
     };
   });
 
@@ -147,14 +145,7 @@ function showLoading(show = true) {
   const overlay = document.getElementById("loadingOverlay");
 
   if (!msg || !overlay) return;
-
-  if (show) {
-    msg.textContent = "🔄 Loading site... (0s)";
-    overlay.style.display = "flex";
-  } else {
-    overlay.style.display = "none";
-  }
-
+  overlay.style.display = show ? "flex" : "none";
   if (spinner) spinner.style.display = show ? "block" : "none";
 }
 
@@ -163,11 +154,9 @@ function startLoadTimer(url) {
   let elapsed = 0;
   loadTimer = setInterval(() => {
     elapsed += 5;
-    if (elapsed === 15) {
-      logDebug(`⏳ Still loading ${url}... (15s elapsed)`, "warn");
-    }
+    if (elapsed === 15) logDebug(`⏳ Still loading ${url}... (15s elapsed)`, "warn");
     if (elapsed === 30) {
-      logDebug(`⚠️ Load taking too long (30s). You may retry.`, "error");
+      logDebug(`⚠️ Load taking too long (30s).`, "error");
       clearInterval(loadTimer);
     }
   }, 5000);
@@ -176,47 +165,53 @@ function startLoadTimer(url) {
 // ------------------ PROXY CORE ------------------
 
 async function loadProxiedSite(url) {
-  // 🔹 Clear debug logs for each new load
   if (debugLogs) debugLogs.innerHTML = "";
 
   showLoading(true);
   logDebug(`Starting load: ${url}`);
   startLoadTimer(url);
 
-  const proxies = [
-    "https://api.allorigins.win/raw?url=",
-    "https://corsproxy.io/?",
-    null // fallback to local direct (same origin) for future “client-IP” mode
+  const sources = [
+    `/proxy?url=${encodeURIComponent(url)}`, // local SW route
+    "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
+    "https://corsproxy.io/?" + encodeURIComponent(url)
   ];
 
-  for (let i = 0; i < proxies.length; i++) {
-    const targetURL = proxies[i] ? proxies[i] + encodeURIComponent(url) : url;
+  for (let i = 0; i < sources.length; i++) {
+    const targetURL = sources[i];
     logDebug(`Attempt ${i + 1}: ${targetURL}`);
 
     try {
       const res = await fetch(targetURL);
       if (!res.ok) throw new Error("Fetch failed with status " + res.status);
-
       logDebug(`Fetch success (attempt ${i + 1})`);
+
       let html = await res.text();
       html = rewriteHTML(html, url);
       setIframeContent(html);
       logDebug(`Finished loading: ${url}`);
 
-      // 🔹 Tell overlay to hide
       window.postMessage({ type: "hideLoading" }, "*");
-
       clearInterval(loadTimer);
       return;
     } catch (err) {
       logDebug(`Attempt ${i + 1} failed: ${err.message}`, "warn");
-      if (i === proxies.length - 1) {
-        setIframeContent(`<p style="color:red;">⚠️ Error loading URL: ${err.message}</p>`);
-        logDebug(`All fetch attempts failed`, "error");
+      if (i === sources.length - 1) {
+        setIframeContent(`<p style="color:red;">⚠️ Error loading: ${err.message}</p>`);
+        logDebug("All fetch attempts failed", "error");
         clearInterval(loadTimer);
       }
     }
   }
+}
+
+// ------------------ SERVICE WORKER REG ------------------
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker
+    .register("sw-proxy.js")
+    .then(() => logDebug("✅ Service Worker registered"))
+    .catch(err => logDebug("⚠️ SW registration failed: " + err.message, "error"));
 }
 
 // ------------------ INIT ------------------
