@@ -115,12 +115,16 @@ function attachDebugHooks() {
   const win = proxyIframe ? proxyIframe.contentWindow : window;
   if (!win) return;
 
+  // Prevent logs from printing inside iframe’s visible console
   ["log", "warn", "error"].forEach(level => {
     const orig = win.console[level];
     win.console[level] = (...args) => {
+      // only send to parent log, not inside iframe DOM
       logDebug(`[iframe ${level}] ${args.join(" ")}`,
         level === "warn" ? "warn" : (level === "error" ? "error" : "info"));
-      orig.apply(win.console, args);
+      try {
+        orig.apply(win.console, []); // no arguments — block iframe from echoing
+      } catch {}
     };
   });
 
@@ -140,10 +144,18 @@ function attachDebugHooks() {
 function showLoading(show = true) {
   const msg = document.getElementById("loadingMessage");
   const spinner = document.getElementById("loadingSpinner");
-  if (msg && spinner) {
+  const overlay = document.getElementById("loadingOverlay");
+
+  if (!msg || !overlay) return;
+
+  if (show) {
     msg.textContent = "🔄 Loading site... (0s)";
-    spinner.style.display = show ? "block" : "none";
+    overlay.style.display = "flex";
+  } else {
+    overlay.style.display = "none";
   }
+
+  if (spinner) spinner.style.display = show ? "block" : "none";
 }
 
 function startLoadTimer(url) {
@@ -161,6 +173,8 @@ function startLoadTimer(url) {
   }, 5000);
 }
 
+// ------------------ PROXY CORE ------------------
+
 async function loadProxiedSite(url) {
   // 🔹 Clear debug logs for each new load
   if (debugLogs) debugLogs.innerHTML = "";
@@ -172,7 +186,7 @@ async function loadProxiedSite(url) {
   const proxies = [
     "https://api.allorigins.win/raw?url=",
     "https://corsproxy.io/?",
-    null
+    null // fallback to local direct (same origin) for future “client-IP” mode
   ];
 
   for (let i = 0; i < proxies.length; i++) {
