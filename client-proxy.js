@@ -22,13 +22,11 @@ function logDebug(message, type = "info") {
     debugLogs.scrollTop = debugLogs.scrollHeight;
   }
 
-  console.log(message);
+  console.log("[DEBUG]", message);
 
   try {
     window.parent.postMessage({ type: "debugLog", message, level: type }, "*");
-  } catch (e) {
-    console.warn("Failed to postMessage log:", e);
-  }
+  } catch {}
 }
 
 // ------------------ REWRITERS ------------------
@@ -37,7 +35,12 @@ function rewriteHTML(html, baseURL) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
 
-  // Fix relative paths
+  // Inject <base> to fix relative paths (important for Google)
+  const base = doc.createElement("base");
+  base.href = baseURL;
+  doc.head.prepend(base);
+
+  // Fix <a> elements
   doc.querySelectorAll("a").forEach(a => {
     const href = a.getAttribute("href");
     if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
@@ -50,6 +53,7 @@ function rewriteHTML(html, baseURL) {
     }
   });
 
+  // Fix forms
   doc.querySelectorAll("form").forEach(f => {
     f.addEventListener("submit", e => {
       e.preventDefault();
@@ -69,7 +73,7 @@ function rewriteHTML(html, baseURL) {
   });
 
   // Fix static assets
-  doc.querySelectorAll("link, script, img").forEach(tag => {
+  doc.querySelectorAll("link, script, img, iframe, source").forEach(tag => {
     const attr = tag.tagName.toLowerCase() === "link" ? "href" : "src";
     const val = tag.getAttribute(attr);
     if (val && !/^https?:|^data:|^\/\//i.test(val)) {
@@ -84,9 +88,7 @@ function rewriteHTML(html, baseURL) {
 // ------------------ IFRAME HELPERS ------------------
 
 function setIframeContent(html) {
-  const doc = proxyIframe
-    ? proxyIframe.contentDocument || proxyIframe.contentWindow.document
-    : document;
+  const doc = proxyIframe.contentDocument || proxyIframe.contentWindow.document;
 
   doc.open();
   doc.write(html);
@@ -95,6 +97,17 @@ function setIframeContent(html) {
 
   reinjectScripts(doc);
   attachDebugHooks();
+
+  // Detect when iframe finishes loading
+  proxyIframe.onload = () => {
+    logDebug("✅ Iframe load complete — hiding overlay");
+    hideLoading();
+  };
+
+  // Add fallback listener
+  proxyIframe.addEventListener("load", () => {
+    hideLoading();
+  });
 }
 
 function reinjectScripts(doc) {
@@ -113,40 +126,39 @@ function reinjectScripts(doc) {
 }
 
 function attachDebugHooks() {
-  const win = proxyIframe ? proxyIframe.contentWindow : window;
+  const win = proxyIframe?.contentWindow;
   if (!win) return;
 
-  // prevent iframe console echo
+  // Prevent iframe console spam entirely
   ["log", "warn", "error"].forEach(level => {
-    const orig = win.console[level];
-    win.console[level] = (...args) => {
-      logDebug(`[iframe ${level}] ${args.join(" ")}`,
-        level === "warn" ? "warn" : (level === "error" ? "error" : "info"));
-      try { orig.apply(win.console, []); } catch {}
-    };
+    win.console[level] = () => {}; // Disable iframe logs completely
   });
 
   win.addEventListener("error", e => {
     logDebug(`[iframe error] ${e.message} at ${e.filename}:${e.lineno}`, "error");
   });
 
-  win.addEventListener("unhandledrejection", e => {
-    logDebug(`[iframe rejection] ${e.reason}`, "error");
+  win.addEventListener("DOMContentLoaded", () => {
+    logDebug("✅ DOMContentLoaded detected — hiding overlay");
+    hideLoading();
   });
 
-  logDebug("Debug hooks attached to iframe");
+  // Fallback: hide overlay after timeout
+  setTimeout(() => {
+    logDebug("⌛ Forcing overlay hide after 10s fallback");
+    hideLoading();
+  }, 10000);
 }
 
 // ------------------ LOADING ------------------
 
 function showLoading(show = true) {
-  const msg = document.getElementById("loadingMessage");
-  const spinner = document.getElementById("loadingSpinner");
   const overlay = document.getElementById("loadingOverlay");
+  if (overlay) overlay.style.display = show ? "flex" : "none";
+}
 
-  if (!msg || !overlay) return;
-  overlay.style.display = show ? "flex" : "none";
-  if (spinner) spinner.style.display = show ? "block" : "none";
+function hideLoading() {
+  showLoading(false);
 }
 
 function startLoadTimer(url) {
@@ -172,7 +184,7 @@ async function loadProxiedSite(url) {
   startLoadTimer(url);
 
   const sources = [
-    `/proxy?url=${encodeURIComponent(url)}`, // local SW route
+    `/proxy?url=${encodeURIComponent(url)}`, // local Service Worker proxy
     "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
     "https://corsproxy.io/?" + encodeURIComponent(url)
   ];
@@ -191,7 +203,6 @@ async function loadProxiedSite(url) {
       setIframeContent(html);
       logDebug(`Finished loading: ${url}`);
 
-      window.postMessage({ type: "hideLoading" }, "*");
       clearInterval(loadTimer);
       return;
     } catch (err) {
