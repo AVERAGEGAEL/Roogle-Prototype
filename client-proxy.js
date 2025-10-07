@@ -22,7 +22,9 @@ function logDebug(message, type = "info") {
     debugLogs.scrollTop = debugLogs.scrollHeight;
   }
   console.log("[DEBUG]", message);
-  try { window.parent.postMessage({ type: "debugLog", message, level: type }, "*"); } catch {}
+  try {
+    window.parent.postMessage({ type: "debugLog", message, level: type }, "*");
+  } catch {}
 }
 
 // ------------------ REWRITERS ------------------
@@ -55,7 +57,8 @@ function rewriteHTML(html, baseURL) {
 
       const data = new FormData(f);
       const query = new URLSearchParams(data).toString();
-      if (f.method?.toLowerCase() === "get") abs += (abs.includes("?") ? "&" : "?") + query;
+      if (f.method?.toLowerCase() === "get")
+        abs += (abs.includes("?") ? "&" : "?") + query;
 
       logDebug(`Form submit intercepted → ${abs}`);
       loadProxiedSite(abs);
@@ -85,15 +88,12 @@ function setIframeContent(html) {
   logDebug("Content injected into iframe");
 
   reinjectScripts(doc);
-  attachDebugHooks();
+  attachDebugHooks(doc);
 
-  // ✅ MutationObserver for dynamic sites (Google, YouTube)
   const observer = new MutationObserver(mutations => {
     for (const m of mutations) {
       for (const node of m.addedNodes) {
         if (node.nodeType !== 1) continue;
-
-        // Handle new links
         node.querySelectorAll?.("a").forEach(a => {
           const href = a.getAttribute("href");
           if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
@@ -105,36 +105,18 @@ function setIframeContent(html) {
             });
           }
         });
-
-        // Handle new scripts
-        node.querySelectorAll?.("script").forEach(oldScript => {
-          const newScript = document.createElement("script");
-          if (oldScript.src) {
-            newScript.src = oldScript.src;
-            newScript.async = false;
-          } else {
-            newScript.textContent = oldScript.textContent;
-          }
-          oldScript.replaceWith(newScript);
-        });
       }
     }
   });
-
   observer.observe(doc.body, { childList: true, subtree: true });
+
   logDebug("MutationObserver active for dynamic rewrites");
 
-  // Event listeners
   proxyIframe.onload = () => {
     logDebug("✅ Iframe load complete — hiding overlay");
     hideLoading();
   };
 
-  proxyIframe.addEventListener("DOMContentLoaded", () => {
-    hideLoading();
-  });
-
-  // Fallback timeout (1 MINUTE)
   setTimeout(() => {
     logDebug("⌛ Forcing overlay hide after 60s fallback");
     hideLoading();
@@ -152,20 +134,13 @@ function reinjectScripts(doc) {
   logDebug(`Reinjected ${scripts.length} script(s)`);
 }
 
-function attachDebugHooks() {
+// Prevent iframe console pollution
+function attachDebugHooks(doc) {
   const win = proxyIframe?.contentWindow;
   if (!win) return;
-
-  // Disable iframe console completely
-  ["log", "warn", "error"].forEach(level => { win.console[level] = () => {}; });
-
+  ["log", "warn", "error"].forEach(level => (win.console[level] = () => {}));
   win.addEventListener("error", e => {
-    logDebug(`[iframe error] ${e.message} at ${e.filename}:${e.lineno}`, "error");
-  });
-
-  win.addEventListener("DOMContentLoaded", () => {
-    logDebug("✅ DOMContentLoaded detected — hiding overlay");
-    hideLoading();
+    logDebug(`[iframe error] ${e.message}`, "error");
   });
 }
 
@@ -185,7 +160,8 @@ function startLoadTimer(url) {
   let elapsed = 0;
   loadTimer = setInterval(() => {
     elapsed += 5;
-    if (elapsed % 15 === 0) logDebug(`⏳ Still loading ${url}... (${elapsed}s elapsed)`, "warn");
+    if (elapsed % 15 === 0)
+      logDebug(`⏳ Still loading ${url}... (${elapsed}s elapsed)`, "warn");
   }, 5000);
 }
 
@@ -199,19 +175,19 @@ async function loadProxiedSite(url) {
   startLoadTimer(url);
 
   const sources = [
-    `/proxy?url=${encodeURIComponent(url)}`,
-    "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
-    "https://corsproxy.io/?" + encodeURIComponent(url)
+    { label: "Direct (ServiceWorker)", url: `/proxy?url=${encodeURIComponent(url)}` },
+    { label: "Mirror A (AllOrigins)", url: `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
+    { label: "Mirror B (corsproxy.io)", url: `https://corsproxy.io/?${encodeURIComponent(url)}` }
   ];
 
   for (let i = 0; i < sources.length; i++) {
-    const targetURL = sources[i];
-    logDebug(`Attempt ${i + 1}: ${targetURL}`);
+    const { label, url: targetURL } = sources[i];
+    logDebug(`Attempt ${i + 1} via ${label}: ${targetURL}`);
 
     try {
       const res = await fetch(targetURL);
       if (!res.ok) throw new Error("Fetch failed with status " + res.status);
-      logDebug(`Fetch success (attempt ${i + 1})`);
+      logDebug(`✅ Success using ${label}`);
 
       let html = await res.text();
       html = rewriteHTML(html, url);
@@ -221,10 +197,10 @@ async function loadProxiedSite(url) {
       clearInterval(loadTimer);
       return;
     } catch (err) {
-      logDebug(`Attempt ${i + 1} failed: ${err.message}`, "warn");
+      logDebug(`Attempt ${i + 1} (${label}) failed: ${err.message}`, "warn");
       if (i === sources.length - 1) {
         setIframeContent(`<p style="color:red;">⚠️ Error loading: ${err.message}</p>`);
-        logDebug("All fetch attempts failed", "error");
+        logDebug("All proxy attempts failed", "error");
         clearInterval(loadTimer);
       }
     }
