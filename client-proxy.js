@@ -21,12 +21,8 @@ function logDebug(message, type = "info") {
     debugLogs.appendChild(p);
     debugLogs.scrollTop = debugLogs.scrollHeight;
   }
-
   console.log("[DEBUG]", message);
-
-  try {
-    window.parent.postMessage({ type: "debugLog", message, level: type }, "*");
-  } catch {}
+  try { window.parent.postMessage({ type: "debugLog", message, level: type }, "*"); } catch {}
 }
 
 // ------------------ REWRITERS ------------------
@@ -35,12 +31,10 @@ function rewriteHTML(html, baseURL) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
 
-  // Inject <base> to fix relative paths (important for Google)
   const base = doc.createElement("base");
   base.href = baseURL;
   doc.head.prepend(base);
 
-  // Fix <a> elements
   doc.querySelectorAll("a").forEach(a => {
     const href = a.getAttribute("href");
     if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
@@ -53,7 +47,6 @@ function rewriteHTML(html, baseURL) {
     }
   });
 
-  // Fix forms
   doc.querySelectorAll("form").forEach(f => {
     f.addEventListener("submit", e => {
       e.preventDefault();
@@ -62,17 +55,13 @@ function rewriteHTML(html, baseURL) {
 
       const data = new FormData(f);
       const query = new URLSearchParams(data).toString();
-
-      if (f.method?.toLowerCase() === "get") {
-        abs += (abs.includes("?") ? "&" : "?") + query;
-      }
+      if (f.method?.toLowerCase() === "get") abs += (abs.includes("?") ? "&" : "?") + query;
 
       logDebug(`Form submit intercepted → ${abs}`);
       loadProxiedSite(abs);
     });
   });
 
-  // Fix static assets
   doc.querySelectorAll("link, script, img, iframe, source").forEach(tag => {
     const attr = tag.tagName.toLowerCase() === "link" ? "href" : "src";
     const val = tag.getAttribute(attr);
@@ -98,28 +87,66 @@ function setIframeContent(html) {
   reinjectScripts(doc);
   attachDebugHooks();
 
-  // Detect when iframe finishes loading
+  // ✅ MutationObserver for dynamic sites (Google, YouTube)
+  const observer = new MutationObserver(mutations => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType !== 1) continue;
+
+        // Handle new links
+        node.querySelectorAll?.("a").forEach(a => {
+          const href = a.getAttribute("href");
+          if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
+            const abs = new URL(href, doc.baseURI).href;
+            a.setAttribute("href", "#url=" + encodeURIComponent(abs));
+            a.addEventListener("click", e => {
+              e.preventDefault();
+              loadProxiedSite(abs);
+            });
+          }
+        });
+
+        // Handle new scripts
+        node.querySelectorAll?.("script").forEach(oldScript => {
+          const newScript = document.createElement("script");
+          if (oldScript.src) {
+            newScript.src = oldScript.src;
+            newScript.async = false;
+          } else {
+            newScript.textContent = oldScript.textContent;
+          }
+          oldScript.replaceWith(newScript);
+        });
+      }
+    }
+  });
+
+  observer.observe(doc.body, { childList: true, subtree: true });
+  logDebug("MutationObserver active for dynamic rewrites");
+
+  // Event listeners
   proxyIframe.onload = () => {
     logDebug("✅ Iframe load complete — hiding overlay");
     hideLoading();
   };
 
-  // Add fallback listener
-  proxyIframe.addEventListener("load", () => {
+  proxyIframe.addEventListener("DOMContentLoaded", () => {
     hideLoading();
   });
+
+  // Fallback timeout (1 MINUTE)
+  setTimeout(() => {
+    logDebug("⌛ Forcing overlay hide after 60s fallback");
+    hideLoading();
+  }, 60000);
 }
 
 function reinjectScripts(doc) {
   const scripts = Array.from(doc.querySelectorAll("script"));
   scripts.forEach(oldScript => {
     const newScript = document.createElement("script");
-    if (oldScript.src) {
-      newScript.src = oldScript.src;
-      newScript.async = false;
-    } else {
-      newScript.textContent = oldScript.textContent;
-    }
+    if (oldScript.src) newScript.src = oldScript.src;
+    else newScript.textContent = oldScript.textContent;
     oldScript.replaceWith(newScript);
   });
   logDebug(`Reinjected ${scripts.length} script(s)`);
@@ -129,10 +156,8 @@ function attachDebugHooks() {
   const win = proxyIframe?.contentWindow;
   if (!win) return;
 
-  // Prevent iframe console spam entirely
-  ["log", "warn", "error"].forEach(level => {
-    win.console[level] = () => {}; // Disable iframe logs completely
-  });
+  // Disable iframe console completely
+  ["log", "warn", "error"].forEach(level => { win.console[level] = () => {}; });
 
   win.addEventListener("error", e => {
     logDebug(`[iframe error] ${e.message} at ${e.filename}:${e.lineno}`, "error");
@@ -142,12 +167,6 @@ function attachDebugHooks() {
     logDebug("✅ DOMContentLoaded detected — hiding overlay");
     hideLoading();
   });
-
-  // Fallback: hide overlay after timeout
-  setTimeout(() => {
-    logDebug("⌛ Forcing overlay hide after 10s fallback");
-    hideLoading();
-  }, 10000);
 }
 
 // ------------------ LOADING ------------------
@@ -166,11 +185,7 @@ function startLoadTimer(url) {
   let elapsed = 0;
   loadTimer = setInterval(() => {
     elapsed += 5;
-    if (elapsed === 15) logDebug(`⏳ Still loading ${url}... (15s elapsed)`, "warn");
-    if (elapsed === 30) {
-      logDebug(`⚠️ Load taking too long (30s).`, "error");
-      clearInterval(loadTimer);
-    }
+    if (elapsed % 15 === 0) logDebug(`⏳ Still loading ${url}... (${elapsed}s elapsed)`, "warn");
   }, 5000);
 }
 
@@ -184,7 +199,7 @@ async function loadProxiedSite(url) {
   startLoadTimer(url);
 
   const sources = [
-    `/proxy?url=${encodeURIComponent(url)}`, // local Service Worker proxy
+    `/proxy?url=${encodeURIComponent(url)}`,
     "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
     "https://corsproxy.io/?" + encodeURIComponent(url)
   ];
