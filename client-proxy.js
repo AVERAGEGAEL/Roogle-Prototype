@@ -22,9 +22,7 @@ function logDebug(message, type = "info") {
     debugLogs.scrollTop = debugLogs.scrollHeight;
   }
   console.log("[DEBUG]", message);
-  try {
-    window.parent.postMessage({ type: "debugLog", message, level: type }, "*");
-  } catch {}
+  try { window.parent.postMessage({ type: "debugLog", message, level: type }, "*"); } catch {}
 }
 
 // ------------------ REWRITERS ------------------
@@ -33,10 +31,18 @@ function rewriteHTML(html, baseURL) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
 
+  // inject permissive CSP meta so injected page scripts can run
+  const csp = doc.createElement("meta");
+  csp.httpEquiv = "Content-Security-Policy";
+  csp.content = "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; frame-ancestors *;";
+  doc.head.prepend(csp);
+
+  // inject <base> so relative URLs resolve
   const base = doc.createElement("base");
   base.href = baseURL;
   doc.head.prepend(base);
 
+  // rewrite anchors -> routed back to proxy
   doc.querySelectorAll("a").forEach(a => {
     const href = a.getAttribute("href");
     if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
@@ -49,22 +55,21 @@ function rewriteHTML(html, baseURL) {
     }
   });
 
+  // intercept forms
   doc.querySelectorAll("form").forEach(f => {
     f.addEventListener("submit", e => {
       e.preventDefault();
       const action = f.getAttribute("action") || baseURL;
       let abs = new URL(action, baseURL).href;
-
       const data = new FormData(f);
       const query = new URLSearchParams(data).toString();
-      if (f.method?.toLowerCase() === "get")
-        abs += (abs.includes("?") ? "&" : "?") + query;
-
+      if (f.method?.toLowerCase() === "get") abs += (abs.includes("?") ? "&" : "?") + query;
       logDebug(`Form submit intercepted → ${abs}`);
       loadProxiedSite(abs);
     });
   });
 
+  // fix static asset relative paths
   doc.querySelectorAll("link, script, img, iframe, source").forEach(tag => {
     const attr = tag.tagName.toLowerCase() === "link" ? "href" : "src";
     const val = tag.getAttribute(attr);
@@ -90,10 +95,13 @@ function setIframeContent(html) {
   reinjectScripts(doc);
   attachDebugHooks(doc);
 
+  // MutationObserver: handle dynamic <a> and <script> additions
   const observer = new MutationObserver(mutations => {
     for (const m of mutations) {
       for (const node of m.addedNodes) {
         if (node.nodeType !== 1) continue;
+
+        // new anchors
         node.querySelectorAll?.("a").forEach(a => {
           const href = a.getAttribute("href");
           if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
@@ -105,18 +113,39 @@ function setIframeContent(html) {
             });
           }
         });
+
+        // new scripts — reinject safely (mark originals to avoid loops)
+        node.querySelectorAll?.("script").forEach(oldScript => {
+          if (oldScript.dataset.reinjected) return;
+          const newScript = document.createElement("script");
+          if (oldScript.src) {
+            newScript.src = oldScript.src;
+            newScript.async = false;
+          } else {
+            newScript.textContent = oldScript.textContent;
+          }
+          oldScript.dataset.reinjected = "true";
+          oldScript.replaceWith(newScript);
+        });
       }
     }
   });
-  observer.observe(doc.body, { childList: true, subtree: true });
 
-  logDebug("MutationObserver active for dynamic rewrites");
+  // watch body (if present)
+  try {
+    if (doc.body) observer.observe(doc.body, { childList: true, subtree: true });
+    logDebug("MutationObserver active for dynamic rewrites");
+  } catch (e) {
+    logDebug("MutationObserver failed to start: " + e.message, "warn");
+  }
 
+  // load events
   proxyIframe.onload = () => {
     logDebug("✅ Iframe load complete — hiding overlay");
     hideLoading();
   };
 
+  // fallback hide (60s)
   setTimeout(() => {
     logDebug("⌛ Forcing overlay hide after 60s fallback");
     hideLoading();
@@ -134,13 +163,20 @@ function reinjectScripts(doc) {
   logDebug(`Reinjected ${scripts.length} script(s)`);
 }
 
-// Prevent iframe console pollution
+// Prevent iframe console pollution and capture runtime errors
 function attachDebugHooks(doc) {
   const win = proxyIframe?.contentWindow;
   if (!win) return;
+
+  // silence iframe console
   ["log", "warn", "error"].forEach(level => (win.console[level] = () => {}));
+
   win.addEventListener("error", e => {
     logDebug(`[iframe error] ${e.message}`, "error");
+  });
+
+  win.addEventListener("unhandledrejection", e => {
+    logDebug(`[iframe rejection] ${e.reason}`, "error");
   });
 }
 
@@ -176,8 +212,7 @@ async function loadProxiedSite(url) {
 
   const sources = [
     { label: "Direct (ServiceWorker)", url: `/proxy?url=${encodeURIComponent(url)}` },
-    { label: "Mirror A (AllOrigins)", url: `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
-    { label: "Mirror B (corsproxy.io)", url: `https://corsproxy.io/?${encodeURIComponent(url)}` }
+    { label: "Mirror (corsproxy.io)", url: `https://corsproxy.io/?${encodeURIComponent(url)}` }
   ];
 
   for (let i = 0; i < sources.length; i++) {
