@@ -89,7 +89,6 @@ function setIframeContent(html) {
   doc.close();
 
   logDebug("Content injected into iframe");
-
   reinjectScripts(doc);
   attachDebugHooks(doc);
 
@@ -169,7 +168,6 @@ function showLoading(show = true) {
   const overlay = document.getElementById("loadingOverlay");
   if (overlay) overlay.style.display = show ? "flex" : "none";
 }
-
 function hideLoading() { showLoading(false); }
 
 function startLoadTimer(url) {
@@ -181,7 +179,7 @@ function startLoadTimer(url) {
   }, 5000);
 }
 
-// ------------------ PROXY CORE ------------------
+// ------------------ PROXY CORE (Multi-Worker Rotation) ------------------
 
 async function loadProxiedSite(url) {
   if (debugLogs) debugLogs.innerHTML = "";
@@ -192,27 +190,38 @@ async function loadProxiedSite(url) {
 
   const backends = [
     "https://cloud1.uraverageopdoge.workers.dev",
-    "https://cloud2.rageinhaler.workers.dev/",
-    "https://cloud3.kevinthejordan.workers.dev/"
+    "https://cloud2.rageinhaler.workers.dev",
+    "https://cloud3.kevinthejordan.workers.dev"
   ];
-  const backend = backends[Math.floor(Math.random() * backends.length)];
-  const targetURL = `${backend}/proxy?url=${encodeURIComponent(url)}`;
-  logDebug(`Using backend: ${backend}`);
 
-  try {
-    const res = await fetch(targetURL);
-    if (!res.ok) throw new Error("Fetch failed with status " + res.status);
-    logDebug("✅ Success using Cloudflare Worker IP");
-    let html = await res.text();
-    html = rewriteHTML(html, url);
-    setIframeContent(html);
-    logDebug(`Finished loading: ${url}`);
-    clearInterval(loadTimer);
-  } catch (err) {
-    setIframeContent(`<p style="color:red;">⚠️ Error loading: ${err.message}</p>`);
-    logDebug("Proxy load failed: " + err.message, "error");
-    clearInterval(loadTimer);
+  // Randomize order each time to avoid repetition
+  const shuffled = backends.sort(() => Math.random() - 0.5);
+  let success = false;
+
+  for (const backend of shuffled) {
+    const targetURL = `${backend}/proxy?url=${encodeURIComponent(url)}`;
+    logDebug(`Using backend: ${backend}`);
+    try {
+      const res = await fetch(targetURL);
+      if (!res.ok) throw new Error("Fetch failed with status " + res.status);
+      let html = await res.text();
+      logDebug("✅ Success using Cloudflare Worker IP");
+      html = rewriteHTML(html, url);
+      setIframeContent(html);
+      logDebug(`Finished loading: ${url}`);
+      success = true;
+      break;
+    } catch (err) {
+      logDebug(`⚠️ Backend ${backend} failed: ${err.message}`, "warn");
+    }
   }
+
+  if (!success) {
+    setIframeContent(`<p style="color:red;">⚠️ All Cloudflare backends failed.</p>`);
+    logDebug("All proxy backends failed", "error");
+  }
+
+  clearInterval(loadTimer);
 }
 
 // ------------------ SERVICE WORKER REGISTRATION ------------------
