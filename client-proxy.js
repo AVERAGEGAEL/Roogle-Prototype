@@ -192,8 +192,8 @@ async function loadProxiedSite(url) {
 
   const backends = [
     "https://cloud1.uraverageopdoge.workers.dev",
-    "https://cloud2.uraverageopdoge.workers.dev",
-    "https://cloud3.uraverageopdoge.workers.dev"
+    "https://cloud2.rageinhaler.workers.dev/",
+    "https://cloud3.kevinthejordan.workers.dev/"
   ];
   const backend = backends[Math.floor(Math.random() * backends.length)];
   const targetURL = `${backend}/proxy?url=${encodeURIComponent(url)}`;
