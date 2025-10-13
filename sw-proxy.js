@@ -3,8 +3,8 @@ self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
 
 const backends = [
   "https://cloud1.uraverageopdoge.workers.dev",
-  "https://cloud2.uraverageopdoge.workers.dev",
-  "https://cloud3.uraverageopdoge.workers.dev"
+  "https://cloud2.rageinhaler.workers.dev/",
+  "https://cloud3.kevinthejordan.workers.dev/"
 ];
 
 self.addEventListener("fetch", event => {
