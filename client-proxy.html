@@ -77,7 +77,7 @@
     }
 
     #debugLogs {
-      display: none; /* hidden to prevent duplicate visual logs */
+      display: none;
     }
   </style>
 </head>
@@ -92,33 +92,64 @@
     <button id="closeOverlay">❌ Dismiss</button>
   </div>
 
-  <iframe id="proxyIframe"></iframe>
+  <iframe id="proxyIframe" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-top-navigation"></iframe>
   <div id="debugLogs"></div>
 
   <script>
-    let elapsed = 0;
+    const overlay = document.getElementById("loadingOverlay");
     const msg = document.getElementById("loadingMessage");
     const timeoutMsg = document.getElementById("timeoutMessage");
-    const overlay = document.getElementById("loadingOverlay");
+    const iframe = document.getElementById("proxyIframe");
 
+    // track load time
+    let elapsed = 0;
     const timer = setInterval(() => {
       elapsed++;
       msg.textContent = `🔄 Loading site... (${elapsed}s)`;
       if (elapsed >= 30) timeoutMsg.style.display = "block";
     }, 1000);
 
-    // Listen for hide signal
-    window.addEventListener("message", (e) => {
+    // hide overlay when told
+    window.addEventListener("message", e => {
       if (e.data?.type === "hideLoading") {
         overlay.style.display = "none";
         clearInterval(timer);
       }
     });
 
+    // allow manual close
     document.getElementById("closeOverlay").addEventListener("click", () => {
       overlay.style.display = "none";
       clearInterval(timer);
     });
+
+    // auto start proxy
+    (function initProxy() {
+      const params = new URLSearchParams(window.location.hash.slice(1));
+      const target = params.get("url");
+      const backend = params.get("backend") || "https://cloud1.uraverageopdoge.workers.dev";
+
+      if (!target) {
+        msg.textContent = "❌ Missing target URL.";
+        timeoutMsg.textContent = "Add #url=https://example.com to the URL.";
+        timeoutMsg.style.display = "block";
+        return;
+      }
+
+      const proxied = `${backend}/proxy?url=${encodeURIComponent(target)}`;
+      iframe.src = proxied;
+
+      iframe.onload = () => {
+        overlay.style.display = "none";
+        clearInterval(timer);
+        parent.postMessage({ type: "hideLoading" }, "*");
+      };
+
+      iframe.onerror = () => {
+        msg.textContent = "⚠️ Proxy failed to load.";
+        timeoutMsg.style.display = "block";
+      };
+    })();
   </script>
 
   <script src="client-proxy.js"></script>
