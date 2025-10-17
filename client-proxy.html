@@ -26,94 +26,55 @@
       z-index: 9999;
     }
 
-    #loadingMessage {
-      font-size: 18px;
-      color: #333;
-      margin-bottom: 15px;
-    }
-
+    #loadingMessage { font-size: 18px; color: #333; margin-bottom: 15px; }
     #loadingSpinner {
       border: 6px solid #f3f3f3;
       border-top: 6px solid #4285f4;
       border-radius: 50%;
-      width: 55px;
-      height: 55px;
+      width: 55px; height: 55px;
       animation: spin 1s linear infinite;
     }
-
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
+    @keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
 
     #timeoutMessage {
-      display: none;
-      margin-top: 20px;
-      color: red;
-      font-size: 16px;
-      text-align: center;
-      max-width: 80%;
+      display: none; margin-top: 20px;
+      color: red; font-size: 16px; text-align: center; max-width: 80%;
     }
 
     #closeOverlay {
-      margin-top: 20px;
-      padding: 6px 12px;
-      font-size: 14px;
-      border: none;
-      border-radius: 4px;
-      background: #d33;
-      color: white;
-      cursor: pointer;
+      margin-top: 20px; padding: 6px 12px;
+      font-size: 14px; border: none; border-radius: 4px;
+      background: #d33; color: white; cursor: pointer;
     }
+    #closeOverlay:hover { background: #b22; }
 
-    #closeOverlay:hover {
-      background: #b22;
-    }
-
-    #proxyIframe {
-      width: 100%;
-      height: 100%;
-      border: none;
-    }
-
-    #debugLogs {
-      display: none;
-    }
+    #proxyIframe { width: 100%; height: 100%; border: none; }
   </style>
 </head>
 <body>
   <div id="loadingOverlay">
     <div id="loadingMessage">🔄 Loading site... (0s)</div>
     <div id="loadingSpinner"></div>
-    <div id="timeoutMessage">
-      ⏳ This is taking longer than usual.<br>
-      You may wait a bit, or try again later.
-    </div>
+    <div id="timeoutMessage">⏳ This is taking longer than usual.<br>Trying fallback...</div>
     <button id="closeOverlay">❌ Dismiss</button>
   </div>
 
-  <iframe
-    id="proxyIframe"
-    sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-top-navigation"
-  ></iframe>
-  <div id="debugLogs"></div>
+  <iframe id="proxyIframe" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-top-navigation"></iframe>
 
   <script>
     const overlay = document.getElementById("loadingOverlay");
     const msg = document.getElementById("loadingMessage");
     const timeoutMsg = document.getElementById("timeoutMessage");
     const iframe = document.getElementById("proxyIframe");
-    const closeBtn = document.getElementById("closeOverlay");
 
-    // your Cloudflare worker pool (rotates automatically)
     const workers = [
       "https://cloud1.uraverageopdoge.workers.dev",
-      "https://cloud2.uraverageopdoge.workers.dev",
+      "https://cloud2.rageinhaler.workers.dev",
       "https://cloud3.kevinthejordan.workers.dev"
     ];
     let workerIndex = 0;
 
-    // load timer
+    // timer stays independent
     let elapsed = 0;
     const timer = setInterval(() => {
       elapsed++;
@@ -121,7 +82,7 @@
       if (elapsed >= 30) timeoutMsg.style.display = "block";
     }, 1000);
 
-    // hide overlay when told by parent
+    // hide overlay if told
     window.addEventListener("message", e => {
       if (e.data?.type === "hideLoading") {
         overlay.style.display = "none";
@@ -129,23 +90,29 @@
       }
     });
 
-    // allow manual dismiss
-    closeBtn.addEventListener("click", () => {
+    document.getElementById("closeOverlay").onclick = () => {
       overlay.style.display = "none";
       clearInterval(timer);
-    });
+    };
 
     function logDebug(message, level = "info") {
-      window.parent.postMessage({ type: "debugLog", message, level }, "*");
+      parent.postMessage({ type: "debugLog", message, level }, "*");
     }
 
-    function loadViaWorker(url) {
+    async function loadViaWorker(url) {
       const backend = workers[workerIndex % workers.length];
       const proxied = `${backend}/proxy?url=${encodeURIComponent(url)}`;
       logDebug(`Using backend: ${backend}`);
+
       iframe.src = proxied;
 
+      const failTimeout = setTimeout(() => {
+        logDebug(`⚠️ ${backend} timed out`, "warn");
+        nextWorker(url);
+      }, 8000);
+
       iframe.onload = () => {
+        clearTimeout(failTimeout);
         logDebug("✅ Iframe loaded successfully.");
         overlay.style.display = "none";
         clearInterval(timer);
@@ -153,23 +120,44 @@
       };
 
       iframe.onerror = () => {
-        logDebug(`❌ ${backend} failed, trying next`, "error");
-        workerIndex++;
-        if (workerIndex < workers.length) {
-          loadViaWorker(url);
-        } else {
-          msg.textContent = "⚠️ All proxies failed.";
-          timeoutMsg.textContent = "Try again later — no working backends.";
-          timeoutMsg.style.display = "block";
-          document.getElementById("loadingSpinner").style.display = "none";
-          closeBtn.style.display = "inline-block";
-          clearInterval(timer);
-        }
+        clearTimeout(failTimeout);
+        nextWorker(url);
       };
     }
 
+    function nextWorker(url) {
+      workerIndex++;
+      if (workerIndex < workers.length) {
+        logDebug("🔁 Retrying with next Cloudflare Worker...");
+        loadViaWorker(url);
+      } else {
+        logDebug("⚠️ All Cloudflare Workers failed. Using Service Worker fallback.", "error");
+        timeoutMsg.textContent = "All Cloudflare Workers failed — switching to local fallback...";
+        timeoutMsg.style.display = "block";
+        loadViaServiceWorker(url);
+      }
+    }
+
+    async function loadViaServiceWorker(url) {
+      try {
+        if ("serviceWorker" in navigator) {
+          await navigator.serviceWorker.register("sw-proxy.js", { scope: "./" });
+          logDebug("✅ Service Worker registered as fallback.");
+        }
+        iframe.src = `/proxy?url=${encodeURIComponent(url)}`;
+        iframe.onload = () => {
+          overlay.style.display = "none";
+          clearInterval(timer);
+        };
+      } catch (err) {
+        logDebug("❌ SW fallback failed: " + err, "error");
+        msg.textContent = "All methods failed. Try again later.";
+        document.getElementById("loadingSpinner").style.display = "none";
+      }
+    }
+
     (function initProxy() {
-      const params = new URLSearchParams(window.location.hash.slice(1));
+      const params = new URLSearchParams(location.hash.slice(1));
       const target = params.get("url");
       if (!target) {
         msg.textContent = "❌ Missing target URL.";
@@ -181,7 +169,5 @@
       loadViaWorker(target);
     })();
   </script>
-
-  <script src="client-proxy.js"></script>
 </body>
 </html>
