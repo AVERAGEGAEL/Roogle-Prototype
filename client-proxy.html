@@ -18,13 +18,12 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(255, 255, 255, 0.96);
+      background: rgba(255, 255, 255, 0.95);
       display: flex;
       flex-direction: column;
       justify-content: center;
       align-items: center;
       z-index: 9999;
-      text-align: center;
     }
 
     #loadingMessage {
@@ -87,77 +86,102 @@
     <div id="loadingMessage">🔄 Loading site... (0s)</div>
     <div id="loadingSpinner"></div>
     <div id="timeoutMessage">
-      ⏳ Taking longer than usual... Please wait or retry.
+      ⏳ This is taking longer than usual.<br>
+      You may wait a bit, or try again later.
     </div>
     <button id="closeOverlay">❌ Dismiss</button>
   </div>
 
-  <iframe id="proxyIframe"></iframe>
+  <iframe
+    id="proxyIframe"
+    sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-top-navigation"
+  ></iframe>
   <div id="debugLogs"></div>
 
   <script>
+    const overlay = document.getElementById("loadingOverlay");
     const msg = document.getElementById("loadingMessage");
     const timeoutMsg = document.getElementById("timeoutMessage");
-    const overlay = document.getElementById("loadingOverlay");
-    const closeBtn = document.getElementById("closeOverlay");
     const iframe = document.getElementById("proxyIframe");
-    const urlParam = new URLSearchParams(location.hash.replace(/^#/, "")).get("url");
+    const closeBtn = document.getElementById("closeOverlay");
 
+    // your Cloudflare worker pool (rotates automatically)
+    const workers = [
+      "https://cloud1.uraverageopdoge.workers.dev",
+      "https://cloud2.uraverageopdoge.workers.dev",
+      "https://cloud3.kevinthejordan.workers.dev"
+    ];
+    let workerIndex = 0;
+
+    // load timer
     let elapsed = 0;
     const timer = setInterval(() => {
       elapsed++;
       msg.textContent = `🔄 Loading site... (${elapsed}s)`;
-      if (elapsed >= 10) timeoutMsg.style.display = "block";
+      if (elapsed >= 30) timeoutMsg.style.display = "block";
     }, 1000);
 
-    function logToParent(message, level = "info") {
-      window.parent.postMessage({ type: "debugLog", message, level }, "*");
-    }
-
-    function showErrorOverlay(reason) {
-      clearInterval(timer);
-      msg.textContent = `⚠️ ${reason}`;
-      timeoutMsg.style.display = "none";
-      document.getElementById("loadingSpinner").style.display = "none";
-      closeBtn.style.display = "inline-block";
-    }
-
-    closeBtn.addEventListener("click", () => {
-      overlay.remove();
-      clearInterval(timer);
-    });
-
-    if (!urlParam) {
-      showErrorOverlay("Missing URL parameter");
-      logToParent("❌ No ?url= parameter found in client-proxy.html", "error");
-    } else {
-      logToParent(`Starting load: ${urlParam}`);
-      iframe.src = urlParam;
-
-      // Handle iframe load
-      iframe.addEventListener("load", () => {
-        logToParent("✅ Iframe loaded successfully.");
-        overlay.style.display = "none";
-        clearInterval(timer);
-      });
-
-      iframe.addEventListener("error", () => {
-        showErrorOverlay("Iframe failed to load.");
-        logToParent("❌ Iframe failed to load.", "error");
-      });
-    }
-
-    // Watch for network/worker failures
-    window.addEventListener("message", (e) => {
-      if (e.data?.type === "proxyError") {
-        showErrorOverlay(e.data.message || "Proxy failed.");
-        logToParent(e.data.message || "Proxy error", "error");
-      }
+    // hide overlay when told by parent
+    window.addEventListener("message", e => {
       if (e.data?.type === "hideLoading") {
         overlay.style.display = "none";
         clearInterval(timer);
       }
     });
+
+    // allow manual dismiss
+    closeBtn.addEventListener("click", () => {
+      overlay.style.display = "none";
+      clearInterval(timer);
+    });
+
+    function logDebug(message, level = "info") {
+      window.parent.postMessage({ type: "debugLog", message, level }, "*");
+    }
+
+    function loadViaWorker(url) {
+      const backend = workers[workerIndex % workers.length];
+      const proxied = `${backend}/proxy?url=${encodeURIComponent(url)}`;
+      logDebug(`Using backend: ${backend}`);
+      iframe.src = proxied;
+
+      iframe.onload = () => {
+        logDebug("✅ Iframe loaded successfully.");
+        overlay.style.display = "none";
+        clearInterval(timer);
+        parent.postMessage({ type: "hideLoading" }, "*");
+      };
+
+      iframe.onerror = () => {
+        logDebug(`❌ ${backend} failed, trying next`, "error");
+        workerIndex++;
+        if (workerIndex < workers.length) {
+          loadViaWorker(url);
+        } else {
+          msg.textContent = "⚠️ All proxies failed.";
+          timeoutMsg.textContent = "Try again later — no working backends.";
+          timeoutMsg.style.display = "block";
+          document.getElementById("loadingSpinner").style.display = "none";
+          closeBtn.style.display = "inline-block";
+          clearInterval(timer);
+        }
+      };
+    }
+
+    (function initProxy() {
+      const params = new URLSearchParams(window.location.hash.slice(1));
+      const target = params.get("url");
+      if (!target) {
+        msg.textContent = "❌ Missing target URL.";
+        timeoutMsg.textContent = "Add #url=https://example.com to the URL.";
+        timeoutMsg.style.display = "block";
+        return;
+      }
+      logDebug(`Starting load: ${target}`);
+      loadViaWorker(target);
+    })();
   </script>
+
+  <script src="client-proxy.js"></script>
 </body>
 </html>
