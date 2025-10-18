@@ -1,173 +1,272 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8" />
   <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: sans-serif;
-      background: #fff;
-      height: 100vh;
-      overflow: hidden;
-    }
-
+    /* Basic full-viewport layout */
+    html,body { height:100%; margin:0; font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background:#fff; }
+    /* Overlay */
     #loadingOverlay {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(255, 255, 255, 0.95);
+      inset: 0;
+      background: rgba(255,255,255,0.96);
       display: flex;
-      flex-direction: column;
-      justify-content: center;
       align-items: center;
+      justify-content: center;
       z-index: 9999;
+      flex-direction: column;
+      padding: 20px;
+      box-sizing: border-box;
     }
-
-    #loadingMessage { font-size: 18px; color: #333; margin-bottom: 15px; }
+    #overlayCard {
+      width: min(820px, 92%);
+      text-align:center;
+      background: #fff;
+      border-radius: 8px;
+      padding: 30px;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.08);
+      position: relative;
+    }
+    #closeBtn {
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      border: none;
+      background: transparent;
+      font-size: 18px;
+      cursor: pointer;
+      color: #555;
+    }
+    #closeBtn:hover { color: #111; }
     #loadingSpinner {
-      border: 6px solid #f3f3f3;
-      border-top: 6px solid #4285f4;
-      border-radius: 50%;
-      width: 55px; height: 55px;
-      animation: spin 1s linear infinite;
+      width: 72px; height: 72px; border-radius: 999px;
+      border: 8px solid #f0f2f5; border-top-color: #2b7cff;
+      animation: spin 900ms linear infinite;
+      margin: 14px auto;
     }
-    @keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loadingMessage { font-size:18px; color:#222; margin-bottom:6px; }
+    #loadingSub { color:#666; font-size:13px; margin-bottom:10px; max-width:88%; margin-left:auto; margin-right:auto; }
+    #dismissBtn {
+      margin-top:14px;
+      background:#d9534f;
+      color:white;
+      padding:8px 14px;
+      border-radius:6px;
+      border: none;
+      cursor: pointer;
+    }
+    #dismissBtn:hover { background:#c43a3a; }
 
-    #timeoutMessage {
-      display: none; margin-top: 20px;
-      color: red; font-size: 16px; text-align: center; max-width: 80%;
+    /* hidden debug area (kept for message storage but not shown) */
+    #debugLogs { display:none; }
+
+    /* iframe fills background under overlay */
+    #proxyIframe {
+      position: absolute;
+      inset: 0;
+      width:100%;
+      height:100%;
+      border: none;
+      z-index: 0;
     }
 
-    #closeOverlay {
-      margin-top: 20px; padding: 6px 12px;
-      font-size: 14px; border: none; border-radius: 4px;
-      background: #d33; color: white; cursor: pointer;
+    /* small responsive tweaks */
+    @media (max-width:480px) {
+      #overlayCard { padding: 18px; }
+      #loadingMessage { font-size:16px; }
     }
-    #closeOverlay:hover { background: #b22; }
-
-    #proxyIframe { width: 100%; height: 100%; border: none; }
   </style>
 </head>
 <body>
-  <div id="loadingOverlay">
-    <div id="loadingMessage">🔄 Loading site... (0s)</div>
-    <div id="loadingSpinner"></div>
-    <div id="timeoutMessage">⏳ This is taking longer than usual.<br>Trying fallback...</div>
-    <button id="closeOverlay">❌ Dismiss</button>
+  <!-- overlay UI -->
+  <div id="loadingOverlay" aria-hidden="false">
+    <div id="overlayCard" role="dialog" aria-label="Loading proxy">
+      <button id="closeBtn" title="Close overlay" aria-label="Close overlay">✕</button>
+      <div id="loadingSpinner" aria-hidden="true"></div>
+      <div id="loadingMessage">🔄 Loading site... (0s)</div>
+      <div id="loadingSub">Contacting proxy and preparing the page. This overlays until the site is ready or an error occurs.</div>
+      <button id="dismissBtn">❌ Dismiss</button>
+    </div>
   </div>
 
-  <iframe id="proxyIframe" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-top-navigation"></iframe>
+  <!-- proxied page -->
+  <iframe id="proxyIframe" sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>
+
+  <!-- small hidden debug box (not shown in iframe) -->
+  <div id="debugLogs" aria-hidden="true"></div>
 
   <script>
-    const overlay = document.getElementById("loadingOverlay");
-    const msg = document.getElementById("loadingMessage");
-    const timeoutMsg = document.getElementById("timeoutMessage");
-    const iframe = document.getElementById("proxyIframe");
+    // Elements
+    const overlay = document.getElementById('loadingOverlay');
+    const msg = document.getElementById('loadingMessage');
+    const sub = document.getElementById('loadingSub');
+    const closeBtn = document.getElementById('closeBtn');
+    const dismissBtn = document.getElementById('dismissBtn');
+    const iframe = document.getElementById('proxyIframe');
+    const hiddenDebug = document.getElementById('debugLogs');
 
-    const workers = [
-      "https://cloud1.uraverageopdoge.workers.dev",
-      "https://cloud2.rageinhaler.workers.dev",
-      "https://cloud3.kevinthejordan.workers.dev"
-    ];
-    let workerIndex = 0;
-
-    // timer stays independent
+    // Timer
     let elapsed = 0;
-    const timer = setInterval(() => {
-      elapsed++;
+    let timer = null;
+    function startTimer() {
+      stopTimer();
+      elapsed = 0;
       msg.textContent = `🔄 Loading site... (${elapsed}s)`;
-      if (elapsed >= 30) timeoutMsg.style.display = "block";
-    }, 1000);
+      timer = setInterval(() => {
+        elapsed++;
+        msg.textContent = `🔄 Loading site... (${elapsed}s)`;
+        // show a gentle warning after 30s
+        if (elapsed === 30) sub.textContent = "⏳ This is taking longer than usual. You can dismiss or try another worker.";
+      }, 1000);
+    }
+    function stopTimer(){
+      if (timer) { clearInterval(timer); timer = null; }
+    }
 
-    // hide overlay if told
-    window.addEventListener("message", e => {
-      if (e.data?.type === "hideLoading") {
-        overlay.style.display = "none";
-        clearInterval(timer);
+    // Hide overlay (and notify parent index if present)
+    function hideOverlay(details = {}) {
+      overlay.style.display = 'none';
+      stopTimer();
+      // forward hide message to parent (index.html) so it can also update debug area
+      try { parent.postMessage({ type: 'hideLoading', details }, '*'); } catch(e){}
+    }
+
+    // Send debug messages to parent (index)
+    function forwardDebug(text, level='info') {
+      try { parent.postMessage({ type:'debugLog', message: text, level }, '*'); } catch(e){}
+      // also keep a local hidden copy
+      const p = document.createElement('div');
+      p.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+      hiddenDebug.appendChild(p);
+      hiddenDebug.scrollTop = hiddenDebug.scrollHeight;
+    }
+
+    // Close handlers
+    closeBtn.addEventListener('click', () => hideOverlay({manual: true}));
+    dismissBtn.addEventListener('click', () => hideOverlay({manual: true}));
+
+    // Listen for client-proxy.js signals (hideLoading)
+    window.addEventListener('message', (ev) => {
+      const d = ev.data || {};
+      if (d?.type === 'hideLoading') {
+        forwardDebug('Received hideLoading postMessage from proxy script');
+        hideOverlay({source:'postMessage'});
+      } else if (d?.type === 'debugLog') {
+        // keep local copy and forward to parent — helpful when client-proxy posts debug into iframe's DOM
+        forwardDebug(`(proxy) ${d.message}`, d.level || 'info');
+      } else if (d?.type === 'proxyError') {
+        // structured proxy error from client-proxy.js
+        forwardDebug(`Proxy Error: ${d.message}`, 'error');
+        sub.textContent = d.message || 'Proxy reported an error';
+        // hide overlay so user can interact with iframe fallback content
+        hideOverlay({error:d.message});
       }
     });
 
-    document.getElementById("closeOverlay").onclick = () => {
-      overlay.style.display = "none";
-      clearInterval(timer);
-    };
+    // scan the iframe content for problematic / duplicate debug markup or 429 pages
+    function scanIframeForProblems() {
+      let doc;
+      try { doc = iframe.contentDocument; } catch (e) { return; }
+      if (!doc) return;
 
-    function logDebug(message, level = "info") {
-      parent.postMessage({ type: "debugLog", message, level }, "*");
-    }
+      // 1) Remove any element with id/class debugLogs — prevents double-UI inside proxied page
+      const dup = doc.querySelectorAll('#debugLogs, .debug-logs, .proxy-debug');
+      dup.forEach(el => {
+        forwardDebug('Removed duplicate debug panel from proxied page');
+        el.remove();
+      });
 
-    async function loadViaWorker(url) {
-      const backend = workers[workerIndex % workers.length];
-      const proxied = `${backend}/proxy?url=${encodeURIComponent(url)}`;
-      logDebug(`Using backend: ${backend}`);
-
-      iframe.src = proxied;
-
-      const failTimeout = setTimeout(() => {
-        logDebug(`⚠️ ${backend} timed out`, "warn");
-        nextWorker(url);
-      }, 8000);
-
-      iframe.onload = () => {
-        clearTimeout(failTimeout);
-        logDebug("✅ Iframe loaded successfully.");
-        overlay.style.display = "none";
-        clearInterval(timer);
-        parent.postMessage({ type: "hideLoading" }, "*");
-      };
-
-      iframe.onerror = () => {
-        clearTimeout(failTimeout);
-        nextWorker(url);
-      };
-    }
-
-    function nextWorker(url) {
-      workerIndex++;
-      if (workerIndex < workers.length) {
-        logDebug("🔁 Retrying with next Cloudflare Worker...");
-        loadViaWorker(url);
-      } else {
-        logDebug("⚠️ All Cloudflare Workers failed. Using Service Worker fallback.", "error");
-        timeoutMsg.textContent = "All Cloudflare Workers failed — switching to local fallback...";
-        timeoutMsg.style.display = "block";
-        loadViaServiceWorker(url);
-      }
-    }
-
-    async function loadViaServiceWorker(url) {
-      try {
-        if ("serviceWorker" in navigator) {
-          await navigator.serviceWorker.register("sw-proxy.js", { scope: "./" });
-          logDebug("✅ Service Worker registered as fallback.");
-        }
-        iframe.src = `/proxy?url=${encodeURIComponent(url)}`;
-        iframe.onload = () => {
-          overlay.style.display = "none";
-          clearInterval(timer);
-        };
-      } catch (err) {
-        logDebug("❌ SW fallback failed: " + err, "error");
-        msg.textContent = "All methods failed. Try again later.";
-        document.getElementById("loadingSpinner").style.display = "none";
-      }
-    }
-
-    (function initProxy() {
-      const params = new URLSearchParams(location.hash.slice(1));
-      const target = params.get("url");
-      if (!target) {
-        msg.textContent = "❌ Missing target URL.";
-        timeoutMsg.textContent = "Add #url=https://example.com to the URL.";
-        timeoutMsg.style.display = "block";
+      // 2) Detect Cloudflare 429 / "Worker received 429" text and report
+      const bodyText = (doc.body && doc.body.innerText) ? doc.body.innerText : '';
+      if (bodyText && /worker received\s*429/i.test(bodyText) || /rate-limit|too many requests|429/i.test(bodyText)) {
+        // capture a short snippet
+        const snippet = bodyText.trim().split('\n').slice(0,6).join(' | ').slice(0,600);
+        forwardDebug('Detected rate-limit / 429 response in proxied page: ' + snippet, 'warn');
+        sub.textContent = '⚠️ Backend returned rate limit (429). Try switching workers or wait a moment.';
+        // hide overlay so user can dismiss and view message
+        hideOverlay({error:'429 detected', snippet});
         return;
       }
-      logDebug(`Starting load: ${target}`);
-      loadViaWorker(target);
+
+      // 3) Detect injected script-errors displayed in page (common fallback messages)
+      if (bodyText && /(refused to connect|cannot load|blocked by CORS|captcha|recaptcha)/i.test(bodyText)) {
+        const snippet = bodyText.trim().split('\n').slice(0,6).join(' | ').slice(0,600);
+        forwardDebug('Detected likely error text in proxied page: ' + snippet, 'warn');
+        sub.textContent = '⚠️ Remote page shows an error message (see Debug Logs). Overlay dismissed.';
+        hideOverlay({error:'page-error-detected', snippet});
+        return;
+      }
+    }
+
+    // Repeated scanning (safe, non-blocking)
+    let scannerInterval = null;
+    function startScanner() {
+      stopScanner();
+      scannerInterval = setInterval(() => {
+        try { scanIframeForProblems(); } catch(e){/* silent */ }
+      }, 900);
+    }
+    function stopScanner(){ if (scannerInterval) { clearInterval(scannerInterval); scannerInterval = null; } }
+
+    // When iframe loads successfully (onload fires), hide overlay
+    iframe.addEventListener('load', () => {
+      forwardDebug('✅ Iframe loaded successfully.');
+      // small delay to allow the in-page scripts to run before we remove overlay
+      setTimeout(() => {
+        try {
+          // ensure not hiding right away if page is still clearly an error (scan)
+          scanIframeForProblems();
+          hideOverlay({on:'iframe.load'});
+        } catch(e){
+          hideOverlay({on:'iframe.load', err:e.message});
+        }
+      }, 650);
+      stopScanner();
+      stopTimer();
+    });
+
+    iframe.addEventListener('error', () => {
+      forwardDebug('Iframe error event fired', 'error');
+      sub.textContent = '⚠️ Iframe failed to load.';
+      hideOverlay({on:'iframe.error'});
+      stopScanner();
+      stopTimer();
+    });
+
+    // Start the visual timer and scanner when the proxy page itself initializes
+    (function init() {
+      startTimer();
+      startScanner();
+
+      // auto-read hash to set iframe src if the proxy was opened directly with #url=...
+      try {
+        const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+        const target = params.get('url');
+        if (target) {
+          // if the client-proxy.js will also set content via postMessage/doc.write, this iframe src will be inert.
+          // Setting src only if not set by outer script.
+          if (!iframe.src || iframe.src === 'about:blank') {
+            iframe.src = target;
+            forwardDebug('Auto-set iframe src from hash: ' + target);
+          }
+        }
+      } catch (e) {
+        // ignore malformed hash
+      }
     })();
+
+    // cleanup when page is unloaded
+    window.addEventListener('beforeunload', () => {
+      stopTimer();
+      stopScanner();
+    });
+
+    // expose a small API for client-proxy.js (if it wants to call)
+    window.clientProxyOverlay = {
+      hide: hideOverlay,
+      debug: forwardDebug
+    };
   </script>
 </body>
 </html>
