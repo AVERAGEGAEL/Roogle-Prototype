@@ -28,6 +28,7 @@ function logDebug(message, type = "info") {
 // ------------------ REWRITERS ------------------
 
 function rewriteHTML(html, baseURL) {
+  logDebug("🔧 Starting HTML rewrite...");
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
 
@@ -40,7 +41,7 @@ function rewriteHTML(html, baseURL) {
   base.href = baseURL;
   doc.head.prepend(base);
 
-  // rewrite <a> tags
+  // rewrite links
   doc.querySelectorAll("a").forEach(a => {
     const href = a.getAttribute("href");
     if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
@@ -53,7 +54,7 @@ function rewriteHTML(html, baseURL) {
     }
   });
 
-  // intercept <form> submits
+  // intercept forms
   doc.querySelectorAll("form").forEach(f => {
     f.addEventListener("submit", e => {
       e.preventDefault();
@@ -62,12 +63,12 @@ function rewriteHTML(html, baseURL) {
       const data = new FormData(f);
       const query = new URLSearchParams(data).toString();
       if (f.method?.toLowerCase() === "get") abs += (abs.includes("?") ? "&" : "?") + query;
-      logDebug(`Form submit intercepted → ${abs}`);
+      logDebug(`📝 Intercepted form → ${abs}`);
       loadProxiedSite(abs);
     });
   });
 
-  // fix static asset paths
+  // fix relative paths
   doc.querySelectorAll("link, script, img, iframe, source").forEach(tag => {
     const attr = tag.tagName.toLowerCase() === "link" ? "href" : "src";
     const val = tag.getAttribute(attr);
@@ -76,7 +77,7 @@ function rewriteHTML(html, baseURL) {
     }
   });
 
-  logDebug("HTML rewrite complete");
+  logDebug("✅ HTML rewrite complete");
   return "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
 }
 
@@ -88,7 +89,7 @@ function setIframeContent(html) {
   doc.write(html);
   doc.close();
 
-  logDebug("Content injected into iframe");
+  logDebug("🧩 Injected rewritten HTML into iframe");
   reinjectScripts(doc);
   attachDebugHooks(doc);
 
@@ -108,28 +109,15 @@ function setIframeContent(html) {
             });
           }
         });
-
-        node.querySelectorAll?.("script").forEach(oldScript => {
-          if (oldScript.dataset.reinjected) return;
-          const newScript = document.createElement("script");
-          if (oldScript.src) {
-            newScript.src = oldScript.src;
-            newScript.async = false;
-          } else {
-            newScript.textContent = oldScript.textContent;
-          }
-          oldScript.dataset.reinjected = "true";
-          oldScript.replaceWith(newScript);
-        });
       }
     }
   });
 
   try {
     if (doc.body) observer.observe(doc.body, { childList: true, subtree: true });
-    logDebug("MutationObserver active for dynamic rewrites");
+    logDebug("👀 MutationObserver active for dynamic rewrites");
   } catch (e) {
-    logDebug("MutationObserver failed: " + e.message, "warn");
+    logDebug("⚠️ MutationObserver failed: " + e.message, "warn");
   }
 
   proxyIframe.onload = () => {
@@ -151,13 +139,12 @@ function reinjectScripts(doc) {
     else newScript.textContent = oldScript.textContent;
     oldScript.replaceWith(newScript);
   });
-  logDebug(`Reinjected ${scripts.length} script(s)`);
+  logDebug(`🔁 Reinjected ${scripts.length} script(s)`);
 }
 
 function attachDebugHooks(doc) {
   const win = proxyIframe?.contentWindow;
   if (!win) return;
-  ["log", "warn", "error"].forEach(level => (win.console[level] = () => {}));
   win.addEventListener("error", e => logDebug(`[iframe error] ${e.message}`, "error"));
   win.addEventListener("unhandledrejection", e => logDebug(`[iframe rejection] ${e.reason}`, "error"));
 }
@@ -179,14 +166,15 @@ function startLoadTimer(url) {
   }, 5000);
 }
 
-// ------------------ PROXY CORE (Multi-Worker Rotation) ------------------
+// ------------------ PROXY CORE (Smart Rotation + Recaptcha Routing) ------------------
 
 async function loadProxiedSite(url) {
   if (debugLogs) debugLogs.innerHTML = "";
 
   showLoading(true);
-  logDebug(`Starting load: ${url}`);
+  logDebug(`🚀 Starting load: ${url}`);
   startLoadTimer(url);
+  logDebug("🌀 Smart rotation system active");
 
   const backends = [
     "https://cloud1.uraverageopdoge.workers.dev",
@@ -194,34 +182,54 @@ async function loadProxiedSite(url) {
     "https://cloud3.kevinthejordan.workers.dev"
   ];
 
-  // Randomize order each time to avoid repetition
+  const captchaWorker = "https://captcha.uraverageopdoge.workers.dev";
+
   const shuffled = backends.sort(() => Math.random() - 0.5);
   let success = false;
 
   for (const backend of shuffled) {
     const targetURL = `${backend}/proxy?url=${encodeURIComponent(url)}`;
-    logDebug(`Using backend: ${backend}`);
+    logDebug(`🌐 Trying backend: ${backend}`);
     try {
       const res = await fetch(targetURL);
+      if (res.status === 403 || res.status === 429) {
+        logDebug(`⚠️ ${backend} returned ${res.status}, switching to Recaptcha Worker`, "warn");
+        await routeToRecaptcha(url, captchaWorker);
+        success = true;
+        break;
+      }
       if (!res.ok) throw new Error("Fetch failed with status " + res.status);
+
       let html = await res.text();
-      logDebug("✅ Success using Cloudflare Worker IP");
+      logDebug(`✅ ${backend} returned success`);
       html = rewriteHTML(html, url);
       setIframeContent(html);
-      logDebug(`Finished loading: ${url}`);
+      logDebug(`🏁 Finished loading ${url}`);
       success = true;
       break;
     } catch (err) {
-      logDebug(`⚠️ Backend ${backend} failed: ${err.message}`, "warn");
+      logDebug(`❌ Backend ${backend} failed: ${err.message}`, "warn");
     }
   }
 
   if (!success) {
-    setIframeContent(`<p style="color:red;">⚠️ All Cloudflare backends failed.</p>`);
+    setIframeContent(`<p style="color:red;">⚠️ All Cloudflare backends failed — site unreachable.</p>`);
     logDebug("All proxy backends failed", "error");
   }
 
   clearInterval(loadTimer);
+}
+
+async function routeToRecaptcha(url, worker) {
+  logDebug(`🔒 Sending to Recaptcha Worker: ${worker}`);
+  try {
+    const res = await fetch(`${worker}?url=${encodeURIComponent(url)}`);
+    const html = await res.text();
+    setIframeContent(html);
+    logDebug("✅ Recaptcha worker handled request successfully");
+  } catch (err) {
+    logDebug("❌ Recaptcha worker failed: " + err.message, "error");
+  }
 }
 
 // ------------------ SERVICE WORKER REGISTRATION ------------------
@@ -229,13 +237,14 @@ async function loadProxiedSite(url) {
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker
     .register("sw-proxy.js")
-    .then(() => logDebug("✅ Service Worker registered"))
+    .then(() => logDebug("✅ Service Worker registered and running"))
     .catch(err => logDebug("⚠️ SW registration failed: " + err.message, "error"));
 }
 
 // ------------------ INIT ------------------
 
 window.addEventListener("load", () => {
+  logDebug("🚧 Client Proxy initialized");
   const target = getTargetURL();
   if (target) loadProxiedSite(target);
 });
