@@ -7,69 +7,6 @@
   <link rel="icon" type="image/png" href="Google.png" />
   <link rel="stylesheet" href="styles.css" />
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #fff;
-      color: #333;
-      margin: 0;
-      padding: 0;
-      text-align: center;
-    }
-    h1 {
-      margin-top: 20px;
-      font-size: 28px;
-    }
-    #recaptcha-container {
-      margin: 15px auto 10px;
-      display: flex;
-      justify-content: center;
-    }
-    #proxyForm {
-      margin: 10px auto 20px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 6px;
-    }
-    #url {
-      width: 50%;
-      padding: 10px;
-      font-size: 15px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-    }
-    button {
-      padding: 10px 14px;
-      font-size: 15px;
-      border: none;
-      background: #4285f4;
-      color: white;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #3367d6;
-    }
-    #fullscreen-btn {
-      background: #f4b400;
-    }
-    #fullscreen-btn:hover {
-      background: #db9b00;
-    }
-    #loadingSpinner {
-      display: none;
-      margin: 10px auto;
-      border: 5px solid #f3f3f3;
-      border-top: 5px solid #4285f4;
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      animation: spin 1s linear infinite;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
     #app {
       display: flex;
       height: 85vh;
@@ -94,34 +31,16 @@
       overflow-y: auto;
       padding: 10px;
       font-family: monospace;
-      text-align: left;
     }
     #debugLogs {
       list-style: none;
       padding: 0;
       margin: 0;
     }
-    #info-section {
-      padding: 8px 0;
-      font-size: 14px;
-      color: #555;
-    }
   </style>
-
-  <!-- reCAPTCHA script -->
-  <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 </head>
 <body>
   <h1>Roogle V3 Prototype</h1>
-
-  <!-- reCAPTCHA box below title -->
-  <div id="recaptcha-container">
-    <div
-      class="g-recaptcha"
-      data-sitekey="6LdMp-orAAAAALzGid9Q9DgnlNy1ejXm0qYFpb6V"
-      data-theme="light"
-    ></div>
-  </div>
 
   <!-- Main search / URL form -->
   <form id="proxyForm" onsubmit="return false;">
@@ -147,7 +66,7 @@
   </div>
 
   <div id="info-section">
-    <p><strong>Roogle V3 Version:</strong> 3.3.7</p>
+    <p><strong>Roogle V3 Version:</strong> 3.3.67</p>
   </div>
 
   <!-- Only script.js here -->
