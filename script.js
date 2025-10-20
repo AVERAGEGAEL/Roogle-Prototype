@@ -7,9 +7,8 @@ const form = document.getElementById("proxyForm");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
 const debugLogs = document.getElementById("debugLogs");
 
-// Lightweight iframe fallback URL (optional)
-const iframeFallback = "";
-
+// Lightweight iframe fallback URL
+const iframeFallback = '';
 // Sites that require special handling
 const clientProxySites = ["google.com", "youtube.com"];
 const blockedSites = ["poki.com", "retrogames.cc", "coolmathgames.com"];
@@ -40,76 +39,50 @@ function logDebug(message, type = "info") {
   if (!debugLogs) return;
   const p = document.createElement("p");
   p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-  p.style.color =
-    type === "error" ? "red" :
-    type === "warn" ? "orange" : "black";
+  p.style.color = type === "error" ? "red" : type === "warn" ? "orange" : "black";
   debugLogs.appendChild(p);
   debugLogs.scrollTop = debugLogs.scrollHeight;
   console.log(message);
 }
 
-// -------------------- CAPTCHA --------------------
-function getRecaptchaResponse() {
-  try {
-    return grecaptcha.getResponse();
-  } catch (err) {
-    console.warn("reCAPTCHA not initialized yet:", err);
-    return "";
-  }
-}
-
 // -------------------- MAIN --------------------
+// Handle form submission
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   e.stopPropagation();
 
   let urlInput = searchBox.value.trim();
+
   if (!urlInput) return alert("Please enter a URL.");
   if (!isValidURL(urlInput)) return alert("Invalid URL. Use example.com or https://example.com.");
 
-  // ✅ reCAPTCHA check
-  const token = getRecaptchaResponse();
-  if (!token) {
-    alert("Please complete the reCAPTCHA before continuing.");
-    return;
-  }
-
-  // Normalize the URL
   if (!urlInput.startsWith("http://") && !urlInput.startsWith("https://")) {
     urlInput = "https://" + urlInput;
   }
 
   iframeContainer.style.display = "block";
   showSpinner(true);
-  logDebug(`Starting load: ${urlInput}`);
 
   if (needsClientProxy(urlInput)) {
-    logDebug(`Using client proxy for: ${urlInput}`);
     loadClientProxy(urlInput);
     return;
   }
 
   if (needsBlockedHandling(urlInput)) {
-    logDebug(`Blocked site: ${urlInput}`, "warn");
     alert("This site cannot be proxied reliably.");
     showSpinner(false);
     return;
   }
 
-  const proxyUrl = iframeFallback
+  let proxyUrl = iframeFallback
     ? iframeFallback + encodeURIComponent(urlInput)
     : urlInput;
 
   iframe.src = proxyUrl;
 
-  iframe.onload = () => {
-    showSpinner(false);
-    logDebug(`✅ Iframe load complete: ${urlInput}`);
-  };
-
+  iframe.onload = () => showSpinner(false);
   iframe.onerror = () => {
     showSpinner(false);
-    logDebug(`❌ Failed to load iframe: ${urlInput}`, "error");
     alert("Unable to load the site fully. Try opening in a normal browser.");
   };
 });
