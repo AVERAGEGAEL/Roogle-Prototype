@@ -260,6 +260,9 @@ async function loadProxiedSite(url) {
   const backends = [
     "https://cloud1.uraverageopdoge.workers.dev",
     "https://cloud2.rageinhaler.workers.dev",
+    "https://cloud3.rageinhaler.workers.dev/",
+    "https://cloud1.rageinhaler.workers.dev/",
+    "https://cloud2.uraverageopdoge.workers.dev/",
     "https://cloud3.kevinthejordan.workers.dev"
   ];
 
