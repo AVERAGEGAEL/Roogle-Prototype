@@ -53,7 +53,91 @@ function rewriteHTML(html, baseURL) {
   base.href = baseURL;
   doc.head.prepend(base);
 
-  // rewrite anchors -> routed back to proxy
+  // inject navigation-protection script so the page cannot navigate away directly
+  const navProtectScript = doc.createElement("script");
+  navProtectScript.textContent = `
+    (function(){
+      // Convert relative -> absolute
+      function abs(href) {
+        try { return new URL(href, location.href).href; } catch(e){ return href; }
+      }
+
+      // Post message to parent (client-proxy) asking it to navigate via proxy
+      function askNavigate(url) {
+        try { window.parent.postMessage({ type:'navigate', url: url }, '*'); } catch(e) {}
+      }
+
+      // anchor clicks
+      document.addEventListener('click', function(e){
+        let a = e.target;
+        while(a && a.tagName !== 'A') a = a.parentElement;
+        if (!a) return;
+        const href = a.getAttribute('href');
+        if (!href) return;
+        // ignore hash-only and javascript:
+        if (href.startsWith('#') || href.startsWith('javascript:')) return;
+        e.preventDefault();
+        askNavigate(abs(href));
+      }, true);
+
+      // forms
+      document.addEventListener('submit', function(e){
+        try {
+          e.preventDefault();
+          const f = e.target;
+          let action = f.getAttribute('action') || location.href;
+          action = abs(action);
+          const m = (f.method||'get').toLowerCase();
+          if (m === 'get') {
+            const data = new FormData(f);
+            const q = new URLSearchParams(data).toString();
+            const url = action + (action.includes('?') ? '&' : '?') + q;
+            askNavigate(url);
+          } else {
+            // For POST, create a temporary URL carrying the body as query string param '__post_data'
+            // Client-proxy will perform a real POST if you implement it; for now send target and let backend try GET fallback.
+            askNavigate(action);
+          }
+        } catch(err){}
+      }, true);
+
+      // history API interception
+      (function(history){
+        const push = history.pushState;
+        const replace = history.replaceState;
+        history.pushState = function(state, title, url) {
+          if (url) {
+            try { window.parent.postMessage({ type:'navigate', url: abs(url) }, '*'); } catch(e){}
+          } else {
+            push.apply(history, arguments);
+          }
+        };
+        history.replaceState = function(state, title, url) {
+          if (url) {
+            try { window.parent.postMessage({ type:'navigate', url: abs(url) }, '*'); } catch(e){}
+          } else {
+            replace.apply(history, arguments);
+          }
+        };
+      })(window.history);
+
+      // override location changes
+      const _assign = window.location.assign;
+      const _replace = window.location.replace;
+      window.location.assign = function(url){ try { window.parent.postMessage({ type:'navigate', url: abs(url) }, '*'); } catch(e){ _assign.call(window.location, url); } };
+      window.location.replace = function(url){ try { window.parent.postMessage({ type:'navigate', url: abs(url) }, '*'); } catch(e){ _replace.call(window.location, url); } };
+
+      // override window.open to route via proxy
+      const _open = window.open;
+      window.open = function(url, name, specs){ try { window.parent.postMessage({ type:'navigate', url: abs(url) }, '*'); return null; } catch(e){ return _open.apply(window, arguments); } };
+
+      // Provide a small debug helper available inside page
+      window.__roogle_proxy = { proxied: true };
+    })();
+  `;
+  doc.head.prepend(navProtectScript);
+
+  // rewrite anchors -> routed back to proxy (fallback)
   doc.querySelectorAll("a").forEach(a => {
     const href = a.getAttribute("href");
     if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
@@ -66,7 +150,7 @@ function rewriteHTML(html, baseURL) {
     }
   });
 
-  // intercept forms
+  // intercept forms (double layer: for static form elements)
   doc.querySelectorAll("form").forEach(f => {
     f.addEventListener("submit", e => {
       e.preventDefault();
@@ -210,12 +294,22 @@ function attachDebugHooks(doc) {
   // (for recaptcha worker we expect something like { recaptchaVerified: true/false, score, target })
   window.addEventListener("message", (ev) => {
     const d = ev.data || {};
+    // recaptcha results
     if (typeof d.recaptchaVerified !== "undefined") {
       logDebug(`🔐 Recaptcha result received inside client-proxy: verified=${d.recaptchaVerified} score=${d.score}`, d.recaptchaVerified ? "info" : "warn");
       // Forward to top-level UI
       sendParent({ type: "recaptchaResult", payload: d });
       // Also notify client-proxy.html so it can hide overlay
       window.postMessage(d, "*");
+      return;
+    }
+
+    // navigate request from injected page
+    if (d && d.type === "navigate" && d.url) {
+      logDebug(`↪️ Injected page requested navigation → ${d.url}`, "info");
+      // attempt to load via our proxy rotation function
+      loadProxiedSite(d.url);
+      return;
     }
   });
 }
@@ -282,10 +376,9 @@ async function loadProxiedSite(url) {
         const info = `Backend ${backend} returned ${res.status}`;
         logDebug(`⚠️ ${info}`, "warn");
         sendParent({ type: "clientProxy:backendFail", backend, status: res.status, info });
-        // if worker redirected to recaptcha (302) or returned blocked content, we fetch body and show it
+        // if worker returned body (captcha/throttle page) inject into iframe so user can solve.
         try {
           const txt = await res.text();
-          // If the backend returns a recaptcha page or explanatory HTML, inject it into iframe so user can solve.
           if (txt && txt.length > 0) {
             logDebug("Injecting backend returned page into iframe for user to act on (captcha/throttle page)");
             setIframeContent(txt);
