@@ -17,8 +17,8 @@ const TRUSTED_RECAPTCHA_ORIGINS = [
   "https://cloud2.rageinhaler.workers.dev",
   "https://cloud3.kevinthejordan.workers.dev",
   "https://cloud1.rageinhaler.workers.dev",
-    "https://cloud2.uraverageopdoge.workers.dev",
-    "https://cloud3.kevinthejordan.workers.dev",
+  "https://cloud2.uraverageopdoge.workers.dev",
+  "https://cloud3.kevinthejordan.workers.dev",
 ];
 
 // -------------------- HELPERS --------------------
@@ -143,6 +143,7 @@ window.addEventListener("message", (event) => {
   // ---------- reCAPTCHA result ----------
   if (d.type === "recaptchaResult" || d.recaptchaVerified !== undefined) {
     const payload = d.payload || d;
+    // Basic origin check; allow if in TRUSTED_RECAPTCHA_ORIGINS
     if (TRUSTED_RECAPTCHA_ORIGINS.length && !TRUSTED_RECAPTCHA_ORIGINS.some(o => origin.startsWith(o))) {
       topLog(`Rejected reCAPTCHA message from untrusted origin: ${origin}`, "warn");
       return;
@@ -166,6 +167,14 @@ window.addEventListener("message", (event) => {
       </div>`;
       showSpinner(false);
     }
+    return;
+  }
+
+  // ---------- Navigation command from iframe (if inner page posts a 'navigate' message) ----------
+  if (d && d.type === "navigate" && d.url) {
+    topLog(`Navigation requested by proxied page → ${d.url}`);
+    // route through client-proxy
+    loadClientProxy(d.url);
     return;
   }
 
