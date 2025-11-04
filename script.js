@@ -19,6 +19,7 @@ const TRUSTED_RECAPTCHA_ORIGINS = [
   "https://cloud1.rageinhaler.workers.dev",
   "https://cloud2.uraverageopdoge.workers.dev",
   "https://cloud3.kevinthejordan.workers.dev",
+  "https://cloud2.kevinthejordan.workers.dev/",
 ];
 
 // -------------------- HELPERS --------------------
