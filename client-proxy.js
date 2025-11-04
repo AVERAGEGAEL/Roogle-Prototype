@@ -357,6 +357,7 @@ async function loadProxiedSite(url) {
     "https://cloud3.rageinhaler.workers.dev/",
     "https://cloud1.rageinhaler.workers.dev/",
     "https://cloud2.uraverageopdoge.workers.dev/",
+    "https://cloud2.kevinthejordan.workers.dev/",
     "https://cloud3.kevinthejordan.workers.dev"
   ];
 
