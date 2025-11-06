@@ -1,3 +1,4 @@
+<script>
 // -------------------- CONFIG / UI ELEMENTS --------------------
 const iframe = document.getElementById("proxyIframe");
 const iframeContainer = document.getElementById("iframe-container");
@@ -11,15 +12,17 @@ const debugLogs = document.getElementById("debugLogs");
 const iframeFallback = "";
 const clientProxySites = ["google.com", "youtube.com"];
 const blockedSites = ["poki.com", "retrogames.cc", "coolmathgames.com"];
+
+// Be permissive but explicit; no trailing slashes (we compare with startsWith)
 const TRUSTED_RECAPTCHA_ORIGINS = [
   "https://recaptcha.uraverageopdoge.workers.dev",
   "https://cloud1.uraverageopdoge.workers.dev",
-  "https://cloud2.rageinhaler.workers.dev",
-  "https://cloud3.kevinthejordan.workers.dev",
-  "https://cloud1.rageinhaler.workers.dev",
   "https://cloud2.uraverageopdoge.workers.dev",
-  "https://cloud3.kevinthejordan.workers.dev",
-  "https://cloud2.kevinthejordan.workers.dev/",
+  "https://cloud1.rageinhaler.workers.dev",
+  "https://cloud2.rageinhaler.workers.dev",
+  "https://cloud3.rageinhaler.workers.dev",
+  "https://cloud2.kevinthejordan.workers.dev",
+  "https://cloud3.kevinthejordan.workers.dev"
 ];
 
 // -------------------- HELPERS --------------------
@@ -41,6 +44,7 @@ function needsBlockedHandling(url) {
 }
 
 function showSpinner(show = true) {
+  if (!loadingSpinner) return;
   loadingSpinner.style.display = show ? "block" : "none";
 }
 
@@ -53,7 +57,7 @@ function logDebug(message, type = "info") {
   debugLogs.scrollTop = debugLogs.scrollHeight;
   console.log(message);
 }
-const topLog = logDebug; // alias for backward compatibility
+const topLog = logDebug; // alias
 
 // -------------------- MAIN HANDLER --------------------
 form.addEventListener("submit", async (e) => {
@@ -93,15 +97,17 @@ form.addEventListener("submit", async (e) => {
 });
 
 // -------------------- FULLSCREEN --------------------
-fullscreenBtn.addEventListener("click", () => {
-  if (!document.fullscreenElement) {
-    iframe.requestFullscreen().catch(err => {
-      alert(`Error enabling fullscreen: ${err.message}`);
-    });
-  } else {
-    document.exitFullscreen();
-  }
-});
+if (fullscreenBtn) {
+  fullscreenBtn.addEventListener("click", () => {
+    if (!document.fullscreenElement) {
+      iframe.requestFullscreen().catch(err => {
+        alert(`Error enabling fullscreen: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  });
+}
 
 // -------------------- CLIENT PROXY LOADING --------------------
 function loadClientProxy(url) {
@@ -118,7 +124,7 @@ window.addEventListener("message", (event) => {
   // ---------- Structured logs from client-proxy ----------
   if (d.type === "clientProxy:log") {
     const e = d.payload || {};
-    topLog(`${e.ts} ${e.level.toUpperCase()}: ${e.message}`, e.level === "error" ? "error" : "info");
+    topLog(`${e.ts} ${String(e.level || "INFO").toUpperCase()}: ${e.message}`, e.level === "error" ? "error" : e.level === "warn" ? "warn" : "info");
     return;
   }
 
@@ -135,6 +141,10 @@ window.addEventListener("message", (event) => {
     showSpinner(false);
     return;
   }
+  if (d.type === "clientProxy:showLoading") {
+    showSpinner(true);
+    return;
+  }
   if (d.type === "clientProxy:hideLoading" || d.type === "loadingDismissed") {
     showSpinner(false);
     topLog("Overlay hidden");
@@ -144,7 +154,7 @@ window.addEventListener("message", (event) => {
   // ---------- reCAPTCHA result ----------
   if (d.type === "recaptchaResult" || d.recaptchaVerified !== undefined) {
     const payload = d.payload || d;
-    // Basic origin check; allow if in TRUSTED_RECAPTCHA_ORIGINS
+
     if (TRUSTED_RECAPTCHA_ORIGINS.length && !TRUSTED_RECAPTCHA_ORIGINS.some(o => origin.startsWith(o))) {
       topLog(`Rejected reCAPTCHA message from untrusted origin: ${origin}`, "warn");
       return;
@@ -155,6 +165,7 @@ window.addEventListener("message", (event) => {
       const target = payload.target;
       if (target) {
         topLog("reCAPTCHA success → reloading proxied site: " + target);
+        // Stay in client-proxy flow (hybrid), so reload client-proxy which will re-pick a backend
         iframe.src = "client-proxy.html#url=" + encodeURIComponent(target);
       } else {
         topLog("reCAPTCHA succeeded but missing target URL", "warn");
@@ -171,10 +182,9 @@ window.addEventListener("message", (event) => {
     return;
   }
 
-  // ---------- Navigation command from iframe (if inner page posts a 'navigate' message) ----------
+  // ---------- Navigation command from iframe ----------
   if (d && d.type === "navigate" && d.url) {
     topLog(`Navigation requested by proxied page → ${d.url}`);
-    // route through client-proxy
     loadClientProxy(d.url);
     return;
   }
@@ -197,3 +207,4 @@ window.addEventListener("load", () => {
     }
   }
 });
+</script>
