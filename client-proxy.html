@@ -2,230 +2,59 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>y</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Roogle Client Proxy</title>
+
   <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-      background: #fff;
-      height: 100vh;
-      overflow: hidden;
-    }
+    body { margin:0; padding:0; overflow:hidden; }
 
+    /* overlay */
     #loadingOverlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(255,255,255,0.96);
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      z-index: 9999;
-      transition: opacity .25s ease;
-    }
-
-    #loadingMessage {
-      font-size: 18px;
-      color: #222;
-      margin-bottom: 12px;
+      position:fixed;
+      top:0; left:0;
+      width:100%; height:100%;
+      background:rgba(255,255,255,0.95);
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      align-items:center;
+      z-index:9999;
+      opacity:1;
+      transition:opacity .25s ease;
     }
 
     #loadingSpinner {
-      border: 6px solid #f3f3f3;
-      border-top: 6px solid #4285f4;
-      border-radius: 50%;
-      width: 55px;
-      height: 55px;
-      animation: spin 1s linear infinite;
-      margin-bottom: 12px;
+      border:6px solid #eee;
+      border-top:6px solid #4285f4;
+      border-radius:50%;
+      width:55px; height:55px;
+      animation:spin 1s linear infinite;
+      margin-bottom:12px;
     }
 
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
+    @keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
 
-    #timeoutMessage {
-      display: none;
-      margin-top: 8px;
-      color: #b12;
-      font-size: 14px;
-      text-align: center;
-      max-width: 85%;
-    }
-
-    #closeOverlay {
-      margin-top: 18px;
-      padding: 8px 14px;
-      font-size: 13px;
-      border: none;
-      border-radius: 8px;
-      background: #d33;
-      color: white;
-      cursor: pointer;
-    }
-
-    #closeOverlay:hover { background: #b22; }
-
-    #proxyIframe {
-      width: 100%;
-      height: 100%;
-      border: none;
-      display: block;
-    }
-
-    #debugLogs {
-      display: none; /* kept hidden; parent UI shows logs */
+    iframe {
+      width:100%;
+      height:100%;
+      border:none;
     }
   </style>
 </head>
 <body>
-  <div id="loadingOverlay" aria-hidden="false">
-    <div id="loadingSpinner" role="status" aria-hidden="true"></div>
-    <div id="loadingMessage">🔄 Loading site... (0s)</div>
-    <div id="timeoutMessage">⏳ This is taking longer than usual. If it's stuck, close and try a different backend.</div>
-    <button id="closeOverlay">❌ Dismiss</button>
+
+  <!-- loading UI -->
+  <div id="loadingOverlay">
+    <div id="loadingSpinner"></div>
+    <div id="loadingMessage">Loading…</div>
   </div>
 
-  <iframe id="proxyIframe" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-top-navigation"></iframe>
-  <div id="debugLogs"></div>
+  <!-- THIS iframe holds the proxied backend site -->
+  <iframe id="innerProxyFrame"></iframe>
 
-  <script>
-    // Small in-page helpers to coordinate with client-proxy.js (this file includes that script).
-    // The logic for loading and backend rotation is in client-proxy.js, which will call
-    // postMessage({ type: 'updateLoading', ... }) or postMessage({ type: 'hideLoading' }) on window (same window).
-    // Here we listen for those messages and for messages from the proxied iframe (recaptcha worker) and forward to parent.
-
-    const overlay = document.getElementById('loadingOverlay');
-    const msgEl = document.getElementById('loadingMessage');
-    const timeoutMsg = document.getElementById('timeoutMessage');
-    const closeBtn = document.getElementById('closeOverlay');
-    const iframe = document.getElementById('proxyIframe');
-
-    let timer = null;
-    let elapsed = 0;
-
-    function startLocalTimer() {
-      clearInterval(timer);
-      elapsed = 0;
-      msgEl.textContent = `🔄 Loading site... (0s)`;
-      timer = setInterval(() => {
-        elapsed++;
-        msgEl.textContent = `🔄 Loading site... (${elapsed}s)`;
-        if (elapsed >= 30) timeoutMsg.style.display = 'block';
-      }, 1000);
-    }
-
-    function stopLocalTimer() {
-      clearInterval(timer);
-    }
-
-    function hideOverlay() {
-      overlay.style.opacity = '0';
-      overlay.setAttribute('aria-hidden', 'true');
-      setTimeout(() => {
-        overlay.style.display = 'none';
-      }, 250);
-      stopLocalTimer();
-    }
-
-    function showOverlay() {
-      overlay.style.display = 'flex';
-      overlay.style.opacity = '1';
-      overlay.setAttribute('aria-hidden', 'false');
-      timeoutMsg.style.display = 'none';
-      startLocalTimer();
-    }
-
-    closeBtn.addEventListener('click', () => {
-      hideOverlay();
-      // notify parent as well
-      try { parent.postMessage({ type: 'loadingDismissed' }, '*'); } catch {}
-    });
-
-    // messages from client-proxy.js (same window) or proxied iframe (child)
-    window.addEventListener('message', e => {
-      const d = e.data || {};
-      // Structured messages used by client-proxy.js:
-      if (d && d.type === 'clientProxy:updateLoading') {
-        // d.message / d.level optional
-        const pretty = d.message || 'Loading...';
-        msgEl.textContent = `🔄 ${pretty} (${elapsed}s)`;
-      }
-
-      if (d && d.type === 'clientProxy:hideLoading') {
-        hideOverlay();
-      }
-
-      if (d && d.type === 'clientProxy:showLoading') {
-        showOverlay();
-      }
-
-      // recaptcha worker posts payload like: { recaptchaVerified: true, score, target }
-      if (d && typeof d.recaptchaVerified !== 'undefined') {
-        // forward to parent (index) and act locally
-        try { parent.postMessage({ type: 'recaptchaResult', payload: d }, '*'); } catch {}
-        if (d.recaptchaVerified) {
-          // success -> auto-close overlay and navigate parent if provided
-          hideOverlay();
-        } else {
-          // failed -> show timeout / message
-          timeoutMsg.textContent = '❌ Verification failed — try again or switch worker.';
-          timeoutMsg.style.display = 'block';
-        }
-      }
-
-      // backend error forwarded from script (ex: 429 page detection)
-      if (d && d.type === 'clientProxy:backendError') {
-        // show message and forward up
-        try { parent.postMessage({ type: 'backendError', info: d.info }, '*'); } catch {}
-        timeoutMsg.textContent = d.info || 'Backend returned an error';
-        timeoutMsg.style.display = 'block';
-        // hide after short delay so user sees it
-        setTimeout(() => {
-          hideOverlay();
-        }, 1200);
-      }
-    });
-
-    // When the iframe loads, try to read its body text if same-origin (injected HTML),
-    // or set a small timeout and then notify parent if it remained blank.
-    iframe.addEventListener('load', () => {
-      // give inner content a moment if it's same-origin injection
-      setTimeout(() => {
-        let innerText = '';
-        try {
-          innerText = iframe.contentDocument && iframe.contentDocument.body && iframe.contentDocument.body.innerText;
-        } catch (e) {
-          // cross-origin — can't read; rely on messages forwarded by client-proxy.js
-        }
-        if (innerText) {
-          const lower = innerText.toLowerCase();
-          // heuristics for worker rate-limit or recaptcha pages
-          if (lower.includes('cloudflare worker received') || lower.includes('rate-limiting') || lower.includes('received 429') || lower.includes('captcha')) {
-            // forward as backend error
-            const info = innerText.split('\n').slice(0,4).join(' ');
-            try { parent.postMessage({ type: 'backendError', info }, '*'); } catch {}
-            // also notify local handler
-            window.postMessage({ type: 'clientProxy:backendError', info }, '*');
-            return;
-          }
-        }
-        // normal iframe load -> hide overlay
-        window.postMessage({ type: 'clientProxy:hideLoading' }, '*');
-        try { parent.postMessage({ type: 'clientProxy:iframeLoaded' }, '*'); } catch {}
-      }, 300);
-    });
-
-    // Auto-start: show overlay when this page loads — client-proxy.js will toggle show/hide as needed
-    showOverlay();
-  </script>
+  <div id="debugLogs" style="display:none"></div>
 
   <script src="client-proxy.js"></script>
+
 </body>
 </html>
