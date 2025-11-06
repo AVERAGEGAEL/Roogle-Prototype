@@ -1,60 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Roogle Client Proxy</title>
-
   <style>
-    body { margin:0; padding:0; overflow:hidden; }
-
-    /* overlay */
-    #loadingOverlay {
-      position:fixed;
-      top:0; left:0;
-      width:100%; height:100%;
-      background:rgba(255,255,255,0.95);
-      display:flex;
-      flex-direction:column;
-      justify-content:center;
-      align-items:center;
-      z-index:9999;
-      opacity:1;
-      transition:opacity .25s ease;
+    html,body{margin:0;height:100%;overflow:hidden}
+    #loadingOverlay{
+      position:fixed;inset:0;
+      background:rgba(255,255,255,0.96);
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      z-index:9999;opacity:1;transition:opacity .2s ease
     }
-
-    #loadingSpinner {
-      border:6px solid #eee;
-      border-top:6px solid #4285f4;
-      border-radius:50%;
-      width:55px; height:55px;
-      animation:spin 1s linear infinite;
-      margin-bottom:12px;
+    #loadingSpinner{
+      border:6px solid #eee;border-top:6px solid #4285f4;border-radius:50%;
+      width:56px;height:56px;animation:spin 1s linear infinite;margin-bottom:10px
     }
-
-    @keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
-
-    iframe {
-      width:100%;
-      height:100%;
-      border:none;
-    }
+    #loadingMessage{font:14px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial;color:#222}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    iframe{width:100%;height:100%;border:0}
   </style>
 </head>
 <body>
-
-  <!-- loading UI -->
-  <div id="loadingOverlay">
-    <div id="loadingSpinner"></div>
+  <!-- Local overlay for this middle page -->
+  <div id="loadingOverlay" aria-hidden="false">
+    <div id="loadingSpinner" role="status" aria-hidden="true"></div>
     <div id="loadingMessage">Loading…</div>
   </div>
 
-  <!-- THIS iframe holds the proxied backend site -->
+  <!-- BACKEND-DRIVEN IFRAME -->
   <iframe id="innerProxyFrame"></iframe>
 
-  <div id="debugLogs" style="display:none"></div>
-
   <script src="client-proxy.js"></script>
-
 </body>
 </html>
+tml>
