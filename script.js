@@ -1,4 +1,3 @@
-<script>
 // -------------------- CONFIG / UI ELEMENTS --------------------
 const iframe = document.getElementById("proxyIframe");
 const iframeContainer = document.getElementById("iframe-container");
@@ -9,202 +8,150 @@ const fullscreenBtn = document.getElementById("fullscreen-btn");
 const debugLogs = document.getElementById("debugLogs");
 
 // -------------------- SITE BEHAVIOR CONFIG --------------------
-const iframeFallback = "";
 const clientProxySites = ["google.com", "youtube.com"];
 const blockedSites = ["poki.com", "retrogames.cc", "coolmathgames.com"];
-
-// Be permissive but explicit; no trailing slashes (we compare with startsWith)
 const TRUSTED_RECAPTCHA_ORIGINS = [
   "https://recaptcha.uraverageopdoge.workers.dev",
   "https://cloud1.uraverageopdoge.workers.dev",
-  "https://cloud2.uraverageopdoge.workers.dev",
-  "https://cloud1.rageinhaler.workers.dev",
   "https://cloud2.rageinhaler.workers.dev",
-  "https://cloud3.rageinhaler.workers.dev",
-  "https://cloud2.kevinthejordan.workers.dev",
+  "https://cloud3.kevinthejordan.workers.dev",
+  "https://cloud1.rageinhaler.workers.dev",
+  "https://cloud2.uraverageopdoge.workers.dev",
   "https://cloud3.kevinthejordan.workers.dev"
 ];
 
 // -------------------- HELPERS --------------------
 function isValidURL(str) {
   try {
-    const url = new URL(str.startsWith("http") ? str : "https://" + str);
-    return url.hostname.includes(".");
-  } catch {
-    return false;
-  }
+    const u = new URL(str.startsWith("http") ? str : "https://" + str);
+    return u.hostname.includes(".");
+  } catch { return false; }
 }
 
 function needsClientProxy(url) {
-  return clientProxySites.some(site => new URL(url).hostname.includes(site));
+  return clientProxySites.some(x => new URL(url).hostname.includes(x));
 }
 
 function needsBlockedHandling(url) {
-  return blockedSites.some(site => new URL(url).hostname.includes(site));
+  return blockedSites.some(x => new URL(url).hostname.includes(x));
 }
 
-function showSpinner(show = true) {
-  if (!loadingSpinner) return;
-  loadingSpinner.style.display = show ? "block" : "none";
-}
+function showSpinner() { loadingSpinner.style.display = "block"; }
+function hideSpinner() { loadingSpinner.style.display = "none"; }
 
-// --- unified log system ---
-function logDebug(message, type = "info") {
-  const p = document.createElement("p");
-  p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-  p.style.color = type === "error" ? "red" : type === "warn" ? "orange" : "black";
-  debugLogs.appendChild(p);
+function log(message, type="info") {
+  const li = document.createElement("li");
+  li.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+  li.style.color = type === "error" ? "red" : type === "warn" ? "orange" : "black";
+  debugLogs.appendChild(li);
   debugLogs.scrollTop = debugLogs.scrollHeight;
   console.log(message);
 }
-const topLog = logDebug; // alias
 
-// -------------------- MAIN HANDLER --------------------
-form.addEventListener("submit", async (e) => {
+// -------------------- FORM HANDLER --------------------
+form.addEventListener("submit", e => {
   e.preventDefault();
   e.stopPropagation();
 
-  let urlInput = searchBox.value.trim();
-  if (!urlInput) return alert("Please enter a URL.");
-  if (!isValidURL(urlInput)) return alert("Invalid URL. Use example.com or https://example.com.");
+  let url = searchBox.value.trim();
+  if (!url) return alert("Enter a URL");
+  if (!isValidURL(url)) return alert("Invalid URL");
 
-  if (!urlInput.startsWith("http://") && !urlInput.startsWith("https://")) {
-    urlInput = "https://" + urlInput;
-  }
+  if (!url.startsWith("http")) url = "https://" + url;
 
   iframeContainer.style.display = "block";
-  showSpinner(true);
+  showSpinner();
 
-  if (needsClientProxy(urlInput)) {
-    loadClientProxy(urlInput);
+  // special sites → client proxy
+  if (needsClientProxy(url)) {
+    log("Routing to client-proxy.html");
+    iframe.src = "client-proxy.html#url=" + encodeURIComponent(url);
     return;
   }
 
-  if (needsBlockedHandling(urlInput)) {
-    alert("This site cannot be proxied reliably.");
-    showSpinner(false);
-    return;
+  // blocked sites
+  if (needsBlockedHandling(url)) {
+    hideSpinner();
+    return alert("This site cannot be proxied reliably.");
   }
 
-  const proxyUrl = iframeFallback ? iframeFallback + encodeURIComponent(urlInput) : urlInput;
-  iframe.src = proxyUrl;
-
-  iframe.onload = () => showSpinner(false);
+  // normal iframe load
+  iframe.src = url;
+  iframe.onload = () => hideSpinner();
   iframe.onerror = () => {
-    showSpinner(false);
-    alert("Unable to load the site fully. Try opening in a normal browser.");
+    hideSpinner();
+    alert("The site cannot load in iframe.");
   };
 });
 
 // -------------------- FULLSCREEN --------------------
-if (fullscreenBtn) {
-  fullscreenBtn.addEventListener("click", () => {
-    if (!document.fullscreenElement) {
-      iframe.requestFullscreen().catch(err => {
-        alert(`Error enabling fullscreen: ${err.message}`);
-      });
-    } else {
-      document.exitFullscreen();
-    }
-  });
-}
+fullscreenBtn.addEventListener("click", () => {
+  if (!document.fullscreenElement) iframe.requestFullscreen().catch(()=>{});
+  else document.exitFullscreen();
+});
 
-// -------------------- CLIENT PROXY LOADING --------------------
-function loadClientProxy(url) {
-  showSpinner(true);
-  iframe.src = "client-proxy.html#url=" + encodeURIComponent(url);
-  iframe.onload = () => showSpinner(false);
-}
-
-// -------------------- MESSAGE HANDLER (recaptcha + client-proxy) --------------------
-window.addEventListener("message", (event) => {
+// -------------------- MESSAGES FROM client-proxy --------------------
+window.addEventListener("message", event => {
   const origin = event.origin || "";
   const d = event.data || {};
 
-  // ---------- Structured logs from client-proxy ----------
+  // structured logs
   if (d.type === "clientProxy:log") {
-    const e = d.payload || {};
-    topLog(`${e.ts} ${String(e.level || "INFO").toUpperCase()}: ${e.message}`, e.level === "error" ? "error" : e.level === "warn" ? "warn" : "info");
+    const m = d.payload;
+    log(`${m.ts} ${m.level.toUpperCase()}: ${m.message}`);
     return;
   }
 
-  if (d.type === "clientProxy:attemptBackend") return topLog(`Attempting backend ${d.backend} → ${d.target}`);
-  if (d.type === "clientProxy:backendSuccess") return topLog(`Backend success: ${d.backend}`);
-  if (d.type === "clientProxy:backendFail") return topLog(`Backend fail: ${d.backend} — ${d.info || d.error || d.status}`, "warn");
-  if (d.type === "clientProxy:backendError" || d.type === "backendError") {
-    topLog(`Backend returned HTML error/captcha: ${d.info || d.payload || 'unknown'}`, "warn");
-    showSpinner(false);
+  if (d.type === "clientProxy:attemptBackend") return log(`Attempting backend ${d.backend}`);
+  if (d.type === "clientProxy:backendSuccess") {
+    log(`Backend success: ${d.backend}`);
+    hideSpinner();
     return;
   }
-  if (d.type === "clientProxy:iframeLoaded") {
-    topLog("Iframe reports loaded");
-    showSpinner(false);
-    return;
-  }
-  if (d.type === "clientProxy:showLoading") {
-    showSpinner(true);
-    return;
-  }
-  if (d.type === "clientProxy:hideLoading" || d.type === "loadingDismissed") {
-    showSpinner(false);
-    topLog("Overlay hidden");
+  if (d.type === "clientProxy:backendFail") return log(`Backend fail: ${d.backend}`, "warn");
+
+  if (d.type === "clientProxy:hideLoading") {
+    hideSpinner();
+    log("Overlay hidden");
     return;
   }
 
-  // ---------- reCAPTCHA result ----------
+  // recaptcha result
   if (d.type === "recaptchaResult" || d.recaptchaVerified !== undefined) {
     const payload = d.payload || d;
 
-    if (TRUSTED_RECAPTCHA_ORIGINS.length && !TRUSTED_RECAPTCHA_ORIGINS.some(o => origin.startsWith(o))) {
-      topLog(`Rejected reCAPTCHA message from untrusted origin: ${origin}`, "warn");
+    // require safe origin
+    if (!TRUSTED_RECAPTCHA_ORIGINS.some(o => origin.startsWith(o))) {
+      log("Rejected recaptcha origin: " + origin, "warn");
       return;
     }
 
-    topLog(`reCAPTCHA result — verified: ${payload.recaptchaVerified} score: ${payload.score}`);
+    log(`Recaptcha → verified=${payload.recaptchaVerified} score=${payload.score}`);
+
     if (payload.recaptchaVerified) {
-      const target = payload.target;
-      if (target) {
-        topLog("reCAPTCHA success → reloading proxied site: " + target);
-        // Stay in client-proxy flow (hybrid), so reload client-proxy which will re-pick a backend
-        iframe.src = "client-proxy.html#url=" + encodeURIComponent(target);
-      } else {
-        topLog("reCAPTCHA succeeded but missing target URL", "warn");
-      }
-      showSpinner(false);
+      iframe.src = "client-proxy.html#url=" + encodeURIComponent(payload.target);
     } else {
-      topLog("reCAPTCHA failed — showing error to user", "warn");
-      iframe.srcdoc = `<div style="font-family:sans-serif;padding:40px;text-align:center;">
+      iframe.srcdoc = `
         <h2>Verification failed</h2>
-        <p>Human verification failed or low trust score. Try again.</p>
-      </div>`;
-      showSpinner(false);
+        <p>Try again.</p>`;
     }
+
+    hideSpinner();
     return;
   }
 
-  // ---------- Navigation command from iframe ----------
-  if (d && d.type === "navigate" && d.url) {
-    topLog(`Navigation requested by proxied page → ${d.url}`);
-    loadClientProxy(d.url);
-    return;
-  }
-
-  // ---------- Default debug forwarding ----------
-  if (d?.type === "debugLog") {
-    logDebug(d.message, d.level);
+  // navigation from injected page
+  if (d.type === "navigate" && d.url) {
+    log("Navigation requested: " + d.url);
+    iframe.src = "client-proxy.html#url=" + encodeURIComponent(d.url);
   }
 });
 
-// -------------------- INIT --------------------
+// -------------------- INIT (load from hash) --------------------
 window.addEventListener("load", () => {
-  const target = (new URLSearchParams(window.location.hash.replace(/^#/, ""))).get("url");
+  const target = new URLSearchParams(location.hash.slice(1)).get("url");
   if (target) {
-    logDebug("Auto-loading URL from hash: " + target);
-    if (clientProxySites.some(s => new URL(target).hostname.includes(s))) {
-      loadClientProxy(target);
-    } else {
-      iframe.src = target;
-    }
+    log("Auto-load: " + target);
+    iframe.src = "client-proxy.html#url=" + encodeURIComponent(target);
   }
 });
-</script>
