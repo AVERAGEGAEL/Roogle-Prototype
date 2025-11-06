@@ -1,24 +1,38 @@
+<script>
 // ------------------ GLOBALS ------------------
 const innerFrame = document.getElementById("innerProxyFrame");
-const overlay = parent.document.getElementById("loadingSpinner"); // parent controls spinner
-let targetURL = null;
+
+// Local overlay (this page)
+const localOverlay = document.getElementById("loadingOverlay");
+const localMsg = document.getElementById("loadingMessage");
 
 // ------------------ HELPERS ------------------
-function getURL() {
+function qparam(name) {
   const p = new URLSearchParams(location.hash.slice(1));
-  return p.get("url");
+  return p.get(name);
 }
 
 function sendParent(msg) {
   try { parent.postMessage(msg, "*"); } catch {}
 }
 
-function showOverlay() {
-  parent.postMessage({ type: "clientProxy:showLoading" }, "*");
+function showLocalOverlay(msg = "Loading…") {
+  if (localOverlay) {
+    localOverlay.style.display = "flex";
+    localOverlay.style.opacity = "1";
+    localOverlay.setAttribute("aria-hidden", "false");
+  }
+  if (localMsg) localMsg.textContent = msg;
+  sendParent({ type: "clientProxy:showLoading" });
 }
 
-function hideOverlay() {
-  parent.postMessage({ type: "clientProxy:hideLoading" }, "*");
+function hideLocalOverlay() {
+  if (localOverlay) {
+    localOverlay.style.opacity = "0";
+    localOverlay.setAttribute("aria-hidden", "true");
+    setTimeout(() => { localOverlay.style.display = "none"; }, 180);
+  }
+  sendParent({ type: "clientProxy:hideLoading" });
 }
 
 function log(msg, level="info") {
@@ -26,18 +40,17 @@ function log(msg, level="info") {
   console.log("[client-proxy]", msg);
 }
 
-// ------------------ DIRECT BACKEND LOADER ------------------
+// ------------------ BACKEND ROTATION (DIRECT IFRAME LOAD) ------------------
 async function loadViaBackend(url) {
-  targetURL = url;
-  showOverlay();
-  log("Loading via backend iframe: " + url);
+  showLocalOverlay("Loading via backend iframe: " + url);
 
   const backends = [
     "https://cloud1.uraverageopdoge.workers.dev",
+    "https://cloud2.uraverageopdoge.workers.dev",
+    "https://cloud1.rageinhaler.workers.dev",
     "https://cloud2.rageinhaler.workers.dev",
     "https://cloud3.rageinhaler.workers.dev",
-    "https://cloud1.rageinhaler.workers.dev",
-    "https://cloud2.uraverageopdoge.workers.dev",
+    "https://cloud2.kevinthejordan.workers.dev",
     "https://cloud3.kevinthejordan.workers.dev"
   ];
 
@@ -46,44 +59,65 @@ async function loadViaBackend(url) {
   for (const backend of shuffled) {
     const proxyURL = `${backend}/proxy?url=${encodeURIComponent(url)}`;
     log("Trying backend: " + backend);
-
     sendParent({ type:"clientProxy:attemptBackend", backend, target: url });
 
-    // ✅ DIRECT LOAD — NOT FETCH
-    innerFrame.src = proxyURL;
-
-    // Wait for load
-    let ok = await waitForLoad(backend);
-    if (ok) return;
+    const ok = await tryBackend(proxyURL, backend);
+    if (ok) {
+      sendParent({ type:"clientProxy:backendSuccess", backend });
+      return;
+    } else {
+      sendParent({ type:"clientProxy:backendFail", backend, info:"timeout or onerror" });
+    }
   }
 
-  // If all failed:
-  innerFrame.srcdoc = `<h2>All workers failed</h2>`;
-  sendParent({ type:"clientProxy:allBackendsFailed" });
+  // All failed
+  innerFrame.srcdoc = `<div style="font-family:system-ui,Segoe UI,Roboto,Arial;padding:32px;text-align:center">
+    <h2>⚠️ All workers failed</h2>
+    <p>Try again or switch to a different worker.</p>
+  </div>`;
+  log("All proxy backends failed", "error");
+  hideLocalOverlay();
 }
 
-// ------------------ WAIT FOR LOAD ------------------
-function waitForLoad(backend) {
-  return new Promise(resolve => {
-    const timeout = setTimeout(() => {
-      log("Backend timed out: " + backend, "warn");
-      resolve(false);
-    }, 5000);
+// Try one backend by setting iframe src and waiting for a signal
+function tryBackend(src, backend) {
+  return new Promise((resolve) => {
+    let settled = false;
 
+    // 1) success path: onload fires
     innerFrame.onload = () => {
-      clearTimeout(timeout);
+      if (settled) return;
+      settled = true;
       log("Backend successful: " + backend);
-      sendParent({ type:"clientProxy:backendSuccess", backend });
-      hideOverlay();
+      hideLocalOverlay();
       resolve(true);
     };
 
+    // 2) network failure
     innerFrame.onerror = () => {
-      clearTimeout(timeout);
+      if (settled) return;
+      settled = true;
       log("Backend failed (onerror): " + backend, "warn");
-      sendParent({ type:"clientProxy:backendFail", backend, error:"onerror" });
       resolve(false);
     };
+
+    // 3) watchdog timeout (some CAPTCHA pages render but delay events)
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      // If we can see something (we can't, cross-origin), just optimistically hide overlay
+      // because many CAPTCHA pages paint before onload. We’ll trust user visibility.
+      log("Backend timed out waiting for onload: " + backend, "warn");
+      hideLocalOverlay();
+      settled = true;
+      resolve(true);
+    }, 8000); // 8s
+
+    // ensure we clear if we resolve earlier
+    const clearAll = () => clearTimeout(timeout);
+    const finalResolve = (v) => { clearAll(); resolve(v); };
+
+    // actually kick off the load
+    innerFrame.src = src;
   });
 }
 
@@ -95,6 +129,7 @@ window.addEventListener("message", (ev) => {
     sendParent({ type:"recaptchaResult", payload:d });
 
     if (d.recaptchaVerified && d.target) {
+      // After verification, reload target again via rotation (hybrid keeps same flow)
       loadViaBackend(d.target);
     }
   }
@@ -102,8 +137,12 @@ window.addEventListener("message", (ev) => {
 
 // ------------------ INIT ------------------
 window.addEventListener("load", () => {
-  const url = getURL();
+  const url = qparam("url");
   if (url) {
+    log("Client-proxy boot with target: " + url);
     loadViaBackend(url);
+  } else {
+    hideLocalOverlay();
   }
 });
+</script>
