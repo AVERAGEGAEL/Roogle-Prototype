@@ -42,7 +42,10 @@ iframe {
   <div id="msg">Loading…</div>
 </div>
 
-<iframe id="innerProxyFrame"></iframe>
+<iframe
+  id="innerProxyFrame"
+  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+></iframe>
 
 <script src="client-proxy.js"></script>
 </body>
