@@ -43,7 +43,7 @@
   <h1>Roogle V3 Prototype</h1>
 
   <!-- Main search / URL form -->
-  <form id="proxyForm" onsubmit="return false;">
+  <form id="proxyForm">
     <input type="text" id="url" placeholder="Enter a URL..." required />
     <button type="submit">Go</button>
     <button type="button" id="fullscreen-btn" title="Toggle Fullscreen">⛶</button>
@@ -51,14 +51,15 @@
 
   <div id="loadingSpinner"></div>
 
-  <!-- Iframe + Debug panel layout -->
   <div id="app">
     <div id="iframe-container">
+      <!-- ✅ sandbox-safe -->
       <iframe
         id="proxyIframe"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        sandbox="allow-scripts allow-forms allow-popups"
       ></iframe>
     </div>
+
     <div id="debug-panel">
       <h3>Debug Logs</h3>
       <ul id="debugLogs"></ul>
@@ -66,10 +67,9 @@
   </div>
 
   <div id="info-section">
-    <p><strong>Roogle V3 Version:</strong> 1.0.0</p>
+    <p><strong>Roogle V3 Version:</strong> 2.0.0 — Secure Proxy Edition</p>
   </div>
 
-  <!-- Only script.js here -->
   <script src="script.js"></script>
 </body>
 </html>
