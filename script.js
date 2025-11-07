@@ -1,4 +1,4 @@
-// -------------------- CONFIG / UI ELEMENTS --------------------
+// -------------------- CONFIG --------------------
 const iframe = document.getElementById("proxyIframe");
 const iframeContainer = document.getElementById("iframe-container");
 const loadingSpinner = document.getElementById("loadingSpinner");
@@ -7,9 +7,6 @@ const form = document.getElementById("proxyForm");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
 const debugLogs = document.getElementById("debugLogs");
 
-// -------------------- SITE BEHAVIOR CONFIG --------------------
-const clientProxySites = ["google.com", "youtube.com"];
-const blockedSites = ["poki.com", "retrogames.cc", "coolmathgames.com"];
 const TRUSTED_RECAPTCHA_ORIGINS = [
   "https://recaptcha.uraverageopdoge.workers.dev",
   "https://cloud1.uraverageopdoge.workers.dev",
@@ -17,141 +14,111 @@ const TRUSTED_RECAPTCHA_ORIGINS = [
   "https://cloud3.kevinthejordan.workers.dev",
   "https://cloud1.rageinhaler.workers.dev",
   "https://cloud2.uraverageopdoge.workers.dev",
-  "https://cloud3.kevinthejordan.workers.dev"
+  "https://cloud2.kevinthejordan.workers.dev",
 ];
 
 // -------------------- HELPERS --------------------
 function isValidURL(str) {
   try {
-    const u = new URL(str.startsWith("http") ? str : "https://" + str);
-    return u.hostname.includes(".");
-  } catch { return false; }
+    const url = new URL(str.startsWith("http") ? str : "https://" + str);
+    return url.hostname.includes(".");
+  } catch {
+    return false;
+  }
 }
 
-function needsClientProxy(url) {
-  return clientProxySites.some(x => new URL(url).hostname.includes(x));
+function showSpinner(show = true) {
+  loadingSpinner.style.display = show ? "block" : "none";
 }
 
-function needsBlockedHandling(url) {
-  return blockedSites.some(x => new URL(url).hostname.includes(x));
-}
-
-function showSpinner() { loadingSpinner.style.display = "block"; }
-function hideSpinner() { loadingSpinner.style.display = "none"; }
-
-function log(message, type="info") {
+function logDebug(msg, type="info") {
   const li = document.createElement("li");
-  li.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+  li.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
   li.style.color = type === "error" ? "red" : type === "warn" ? "orange" : "black";
   debugLogs.appendChild(li);
   debugLogs.scrollTop = debugLogs.scrollHeight;
-  console.log(message);
+  console.log(msg);
 }
 
-// -------------------- FORM HANDLER --------------------
-form.addEventListener("submit", e => {
+const topLog = logDebug;
+
+// -------------------- MAIN FORM --------------------
+form.addEventListener("submit", (e) => {
   e.preventDefault();
-  e.stopPropagation();
 
   let url = searchBox.value.trim();
-  if (!url) return alert("Enter a URL");
   if (!isValidURL(url)) return alert("Invalid URL");
 
   if (!url.startsWith("http")) url = "https://" + url;
 
   iframeContainer.style.display = "block";
-  showSpinner();
+  showSpinner(true);
 
-  // special sites → client proxy
-  if (needsClientProxy(url)) {
-    log("Routing to client-proxy.html");
-    iframe.src = "client-proxy.html#url=" + encodeURIComponent(url);
-    return;
-  }
-
-  // blocked sites
-  if (needsBlockedHandling(url)) {
-    hideSpinner();
-    return alert("This site cannot be proxied reliably.");
-  }
-
-  // normal iframe load
-  iframe.src = url;
-  iframe.onload = () => hideSpinner();
-  iframe.onerror = () => {
-    hideSpinner();
-    alert("The site cannot load in iframe.");
-  };
+  // ✅ ALL sites use client-proxy.html
+  topLog("Routing to client-proxy.html → " + url);
+  iframe.src = "client-proxy.html#url=" + encodeURIComponent(url);
 });
 
 // -------------------- FULLSCREEN --------------------
 fullscreenBtn.addEventListener("click", () => {
-  if (!document.fullscreenElement) iframe.requestFullscreen().catch(()=>{});
+  if (!document.fullscreenElement) iframe.requestFullscreen();
   else document.exitFullscreen();
 });
 
-// -------------------- MESSAGES FROM client-proxy --------------------
-window.addEventListener("message", event => {
+// -------------------- MESSAGE HANDLER --------------------
+window.addEventListener("message", (event) => {
   const origin = event.origin || "";
   const d = event.data || {};
 
-  // structured logs
   if (d.type === "clientProxy:log") {
-    const m = d.payload;
-    log(`${m.ts} ${m.level.toUpperCase()}: ${m.message}`);
+    const e = d.payload || {};
+    topLog(`${e.ts} ${e.level.toUpperCase()}: ${e.message}`);
     return;
   }
 
-  if (d.type === "clientProxy:attemptBackend") return log(`Attempting backend ${d.backend}`);
-  if (d.type === "clientProxy:backendSuccess") {
-    log(`Backend success: ${d.backend}`);
-    hideSpinner();
+  if (d.type === "clientProxy:attemptBackend") {
+    topLog(`Trying backend: ${d.backend} → ${d.target}`);
     return;
   }
-  if (d.type === "clientProxy:backendFail") return log(`Backend fail: ${d.backend}`, "warn");
+
+  if (d.type === "clientProxy:backendSuccess") {
+    topLog(`Backend success: ${d.backend}`);
+    showSpinner(false);
+    return;
+  }
+
+  if (d.type === "clientProxy:backendFail") {
+    topLog(`Backend fail: ${d.backend}`, "warn");
+    return;
+  }
 
   if (d.type === "clientProxy:hideLoading") {
-    hideSpinner();
-    log("Overlay hidden");
+    showSpinner(false);
+    topLog("Overlay hidden");
     return;
   }
 
-  // recaptcha result
-  if (d.type === "recaptchaResult" || d.recaptchaVerified !== undefined) {
-    const payload = d.payload || d;
+  if (d.type === "backendError") {
+    topLog(`Backend returned error page`, "warn");
+    showSpinner(false);
+    return;
+  }
 
-    // require safe origin
-    if (!TRUSTED_RECAPTCHA_ORIGINS.some(o => origin.startsWith(o))) {
-      log("Rejected recaptcha origin: " + origin, "warn");
+  if (d.type === "recaptchaResult") {
+    if (!TRUSTED_RECAPTCHA_ORIGINS.includes(origin)) {
+      topLog(`Rejected recaptcha message from ${origin}`, "warn");
       return;
     }
-
-    log(`Recaptcha → verified=${payload.recaptchaVerified} score=${payload.score}`);
-
-    if (payload.recaptchaVerified) {
-      iframe.src = "client-proxy.html#url=" + encodeURIComponent(payload.target);
-    } else {
-      iframe.srcdoc = `
-        <h2>Verification failed</h2>
-        <p>Try again.</p>`;
-    }
-
-    hideSpinner();
-    return;
-  }
-
-  // navigation from injected page
-  if (d.type === "navigate" && d.url) {
-    log("Navigation requested: " + d.url);
-    iframe.src = "client-proxy.html#url=" + encodeURIComponent(d.url);
+    topLog(`Recaptcha verified=${d.payload.recaptchaVerified}`);
+    showSpinner(false);
   }
 });
 
-// -------------------- INIT (load from hash) --------------------
+// -------------------- INIT AUTOLOAD --------------------
 window.addEventListener("load", () => {
   const target = new URLSearchParams(location.hash.slice(1)).get("url");
   if (target) {
-    log("Auto-load: " + target);
+    topLog("Auto-loading: " + target);
     iframe.src = "client-proxy.html#url=" + encodeURIComponent(target);
   }
 });
