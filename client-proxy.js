@@ -13,23 +13,32 @@ function sendParent(msg) {
   try { parent.postMessage(msg, "*"); } catch {}
 }
 
-function log(msg, level="info") {
+function log(msg, level = "info") {
   sendParent({
-    type:"clientProxy:log",
-    payload:{ ts:new Date().toLocaleTimeString(), level, message:msg }
+    type: "clientProxy:log",
+    payload: { ts: new Date().toLocaleTimeString(), level, message: msg }
   });
   console.log("[client-proxy]", msg);
 }
 
 function showOverlay() {
+  if (!overlay) return;
   overlay.style.display = "flex";
   overlay.style.opacity = "1";
 }
 
+// ✅ **MAIN FIX — overlay must be REMOVED, not faded**
 function hideOverlay() {
+  if (!overlay) return;
+
   overlay.style.opacity = "0";
-  setTimeout(() => overlay.style.display = "none", 250);
-  sendParent({ type:"clientProxy:hideLoading" });
+
+  // remove from layout so it cannot block clicks
+  setTimeout(() => {
+    overlay.style.display = "none";
+  }, 150);
+
+  sendParent({ type: "clientProxy:hideLoading" });
 }
 
 // ------------------ BACKEND ROTATION ------------------
@@ -52,7 +61,7 @@ async function loadViaBackend(url) {
   for (const backend of list) {
     const proxyURL = `${backend}/proxy?url=${encodeURIComponent(url)}`;
     log("Trying backend: " + backend);
-    sendParent({ type:"clientProxy:attemptBackend", backend, target:url });
+    sendParent({ type: "clientProxy:attemptBackend", backend, target: url });
 
     inner.src = proxyURL;
 
@@ -60,8 +69,8 @@ async function loadViaBackend(url) {
     if (ok) return;
   }
 
-  inner.srcdoc = `<h2>All workers failed</h2>`;
-  sendParent({ type:"clientProxy:allBackendsFailed" });
+  inner.srcdoc = `<h2 style="font-family:sans-serif;text-align:center;padding:20px;">All workers failed</h2>`;
+  sendParent({ type: "clientProxy:allBackendsFailed" });
 }
 
 // ------------------ WAIT FOR IFRAME LOAD ------------------
@@ -73,8 +82,8 @@ function waitForLoad(backend) {
       if (!settled) {
         settled = true;
         log("Backend timeout: " + backend, "warn");
-        sendParent({ type:"clientProxy:backendFail", backend, error:"timeout" });
-        resolve(false);   // ✅ FIXED (Gemini was correct)
+        sendParent({ type: "clientProxy:backendFail", backend, error: "timeout" });
+        resolve(false); // ✅ correct
       }
     }, 8000);
 
@@ -83,8 +92,8 @@ function waitForLoad(backend) {
         settled = true;
         clearTimeout(timeout);
         log("Backend successful: " + backend);
-        sendParent({ type:"clientProxy:backendSuccess", backend });
-        hideOverlay();
+        sendParent({ type: "clientProxy:backendSuccess", backend });
+        hideOverlay();      // ✅ overlay now removed correctly
         resolve(true);
       }
     };
@@ -94,19 +103,22 @@ function waitForLoad(backend) {
         settled = true;
         clearTimeout(timeout);
         log("Backend failed (onerror): " + backend, "warn");
-        sendParent({ type:"clientProxy:backendFail", backend, error:"onerror" });
+        sendParent({ type: "clientProxy:backendFail", backend, error: "onerror" });
         resolve(false);
       }
     };
   });
 }
 
-// ------------------ RECAPTCHA ------------------
+// ------------------ RECAPTCHA HANDLER ------------------
 window.addEventListener("message", (ev) => {
   const d = ev.data || {};
   if (typeof d.recaptchaVerified !== "undefined") {
-    sendParent({ type:"recaptchaResult", payload:d });
-    if (d.recaptchaVerified && d.target) loadViaBackend(d.target);
+    sendParent({ type: "recaptchaResult", payload: d });
+
+    if (d.recaptchaVerified && d.target) {
+      loadViaBackend(d.target);
+    }
   }
 });
 
