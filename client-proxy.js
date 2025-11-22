@@ -1,6 +1,7 @@
 // ------------------ GLOBALS ------------------
 const inner = document.getElementById("innerProxyFrame");
 const overlay = document.getElementById("loadingOverlay");
+const closeOverlayBtn = document.getElementById("closeOverlay");
 let target = null;
 
 // ------------------ HELPERS ------------------
@@ -8,38 +9,24 @@ function getURL() {
   const p = new URLSearchParams(location.hash.slice(1));
   return p.get("url");
 }
-
-function sendParent(msg) {
-  try { parent.postMessage(msg, "*"); } catch {}
-}
-
-function log(msg, level = "info") {
+function sendParent(msg) { try { parent.postMessage(msg, "*"); } catch {} }
+function log(msg, level="info") {
   sendParent({
-    type: "clientProxy:log",
-    payload: { ts: new Date().toLocaleTimeString(), level, message: msg }
+    type:"clientProxy:log",
+    payload:{ ts:new Date().toLocaleTimeString(), level, message:msg }
   });
   console.log("[client-proxy]", msg);
 }
-
 function showOverlay() {
-  if (!overlay) return;
   overlay.style.display = "flex";
   overlay.style.opacity = "1";
 }
-
-// ✅ **MAIN FIX — overlay must be REMOVED, not faded**
 function hideOverlay() {
-  if (!overlay) return;
-
   overlay.style.opacity = "0";
-
-  // remove from layout so it cannot block clicks
-  setTimeout(() => {
-    overlay.style.display = "none";
-  }, 150);
-
-  sendParent({ type: "clientProxy:hideLoading" });
+  setTimeout(()=> overlay.style.display = "none", 250);
+  sendParent({ type:"clientProxy:hideLoading" });
 }
+closeOverlayBtn.addEventListener("click", () => { hideOverlay(); sendParent({ type:"loadingDismissed" }); });
 
 // ------------------ BACKEND ROTATION ------------------
 async function loadViaBackend(url) {
@@ -61,29 +48,30 @@ async function loadViaBackend(url) {
   for (const backend of list) {
     const proxyURL = `${backend}/proxy?url=${encodeURIComponent(url)}`;
     log("Trying backend: " + backend);
-    sendParent({ type: "clientProxy:attemptBackend", backend, target: url });
+    sendParent({ type:"clientProxy:attemptBackend", backend, target:url });
 
     inner.src = proxyURL;
-
     const ok = await waitForLoad(backend);
     if (ok) return;
   }
 
-  inner.srcdoc = `<h2 style="font-family:sans-serif;text-align:center;padding:20px;">All workers failed</h2>`;
-  sendParent({ type: "clientProxy:allBackendsFailed" });
+  inner.srcdoc = `<div style="font-family:sans-serif;padding:24px;text-align:center;">
+    <h3>⚠️ All Cloudflare backends failed</h3>
+    <p>Please try again later or switch workers.</p>
+  </div>`;
+  sendParent({ type:"clientProxy:allBackendsFailed" });
 }
 
 // ------------------ WAIT FOR IFRAME LOAD ------------------
 function waitForLoad(backend) {
   return new Promise(resolve => {
     let settled = false;
-
     const timeout = setTimeout(() => {
       if (!settled) {
         settled = true;
         log("Backend timeout: " + backend, "warn");
-        sendParent({ type: "clientProxy:backendFail", backend, error: "timeout" });
-        resolve(false); // ✅ correct
+        sendParent({ type:"clientProxy:backendFail", backend, error:"timeout" });
+        resolve(false); // make sure timeout = failure
       }
     }, 8000);
 
@@ -92,8 +80,8 @@ function waitForLoad(backend) {
         settled = true;
         clearTimeout(timeout);
         log("Backend successful: " + backend);
-        sendParent({ type: "clientProxy:backendSuccess", backend });
-        hideOverlay();      // ✅ overlay now removed correctly
+        sendParent({ type:"clientProxy:backendSuccess", backend });
+        hideOverlay();
         resolve(true);
       }
     };
@@ -103,22 +91,29 @@ function waitForLoad(backend) {
         settled = true;
         clearTimeout(timeout);
         log("Backend failed (onerror): " + backend, "warn");
-        sendParent({ type: "clientProxy:backendFail", backend, error: "onerror" });
+        sendParent({ type:"clientProxy:backendFail", backend, error:"onerror" });
         resolve(false);
       }
     };
   });
 }
 
-// ------------------ RECAPTCHA HANDLER ------------------
+// ------------------ RECAPTCHA MESSAGE HANDLING ------------------
 window.addEventListener("message", (ev) => {
   const d = ev.data || {};
+  // recaptcha result forwarded from worker/page: { recaptchaVerified, score, target }
   if (typeof d.recaptchaVerified !== "undefined") {
-    sendParent({ type: "recaptchaResult", payload: d });
-
+    log("Recaptcha result received inside client-proxy: " + JSON.stringify(d));
+    sendParent({ type:"recaptchaResult", payload:d });
     if (d.recaptchaVerified && d.target) {
+      // re-run backend rotation with the target the recaptcha worker returned
       loadViaBackend(d.target);
     }
+  }
+
+  // navigation messages from injected page (if any)
+  if (d && d.type === "navigate" && d.url) {
+    loadViaBackend(d.url);
   }
 });
 
