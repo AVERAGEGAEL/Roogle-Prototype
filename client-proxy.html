@@ -1,52 +1,45 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Roogle Proxy Loader</title>
-
-<style>
-body { margin:0; overflow:hidden; }
-
-#loadingOverlay {
-  position:fixed;
-  top:0; left:0; width:100%; height:100%;
-  background:rgba(255,255,255,0.95);
-  display:flex; flex-direction:column;
-  justify-content:center; align-items:center;
-  z-index:9999;
-  transition:opacity .25s;
-}
-
-#spinner {
-  border:6px solid #eee;
-  border-top:6px solid #4285f4;
-  width:55px; height:55px;
-  border-radius:50%;
-  animation:spin 1s linear infinite;
-  margin-bottom:12px;
-}
-
-@keyframes spin { 100% { transform:rotate(360deg); } }
-
-iframe {
-  width:100%; height:100%; border:none;
-}
-</style>
-
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Roogle Client Proxy</title>
+  <style>
+    html,body { height:100%; margin:0; }
+    body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; }
+    #loadingOverlay {
+      position:fixed; inset:0;
+      display:flex; align-items:center; justify-content:center;
+      background: rgba(255,255,255,0.96); z-index:9999;
+      transition: opacity .25s ease;
+    }
+    #loadingOverlay.hidden { opacity:0; pointer-events:none; display:none; }
+    #loadingSpinner {
+      border:6px solid #eee; border-top:6px solid #4285f4; border-radius:50%;
+      width:65px;height:65px; animation:spin 1s linear infinite; margin-bottom:12px;
+    }
+    @keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+    #loadingMessage { font-size:18px; color:#222; margin-bottom:8px; }
+    #timeoutMessage { display:none; color:#b12; margin-top:8px; }
+    #innerProxyFrame { width:100%; height:100vh; border:none; display:block; }
+    #debugLogs { display:none; }
+    #closeOverlay { margin-top:12px; padding:8px 14px; border-radius:8px; border:none; background:#d33; color:white; cursor:pointer; }
+  </style>
 </head>
 <body>
+  <div id="loadingOverlay" aria-hidden="false">
+    <div>
+      <div id="loadingSpinner" role="status" aria-hidden="true"></div>
+      <div id="loadingMessage">🔄 Loading site...</div>
+      <div id="timeoutMessage">⏳ This is taking longer than usual. Try a different worker.</div>
+      <div style="text-align:center;"><button id="closeOverlay">Dismiss</button></div>
+    </div>
+  </div>
 
-<div id="loadingOverlay">
-  <div id="spinner"></div>
-  <div id="msg">Loading…</div>
-</div>
+  <!-- The proxy worker page will load inside this iframe -->
+  <iframe id="innerProxyFrame" sandbox="allow-scripts allow-forms allow-popups allow-top-navigation"></iframe>
+  <div id="debugLogs"></div>
 
-<iframe
-  id="innerProxyFrame"
-  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-></iframe>
-
-<script src="client-proxy.js"></script>
+  <script src="client-proxy.js"></script>
 </body>
 </html>
