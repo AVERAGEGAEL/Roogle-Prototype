@@ -5,7 +5,17 @@ const loadingSpinner = document.getElementById("loadingSpinner");
 const searchBox = document.getElementById("url");
 const form = document.getElementById("proxyForm");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
-const debugLogs = document.getElementById("debugLogs");
+
+// Fix: index.html calls this "sidebarLogs", not "debugLogs"
+const debugLogs = document.getElementById("sidebarLogs"); 
+
+// --- NEW: SIDEBAR ELEMENTS ---
+const sidebar = document.getElementById("sidebar");
+const hamburgerBtn = document.getElementById("hamburger");
+const closeSidebarBtn = document.getElementById("closeSidebar");
+const btnGoogle = document.getElementById("btn-google");
+const btnHaha = document.getElementById("btn-hahagames");
+const enableDebugCheckbox = document.getElementById("enableDebug");
 
 // -------------------- SITE BEHAVIOR CONFIG --------------------
 const iframeFallback = "";
@@ -21,6 +31,50 @@ const TRUSTED_RECAPTCHA_ORIGINS = [
   "https://cloud3.kevinthejordan.workers.dev",
   "https://cloud2.kevinthejordan.workers.dev/",
 ];
+
+// -------------------- SIDEBAR & UI LOGIC --------------------
+
+// 1. Toggle Sidebar Open
+if (hamburgerBtn) {
+  hamburgerBtn.addEventListener("click", () => {
+    sidebar.classList.add("sidebar-open");
+    sidebar.setAttribute("aria-hidden", "false");
+  });
+}
+
+// 2. Close Sidebar
+if (closeSidebarBtn) {
+  closeSidebarBtn.addEventListener("click", () => {
+    sidebar.classList.remove("sidebar-open");
+    sidebar.setAttribute("aria-hidden", "true");
+  });
+}
+
+// 3. Quick Links
+if (btnGoogle) {
+  btnGoogle.addEventListener("click", () => {
+    searchBox.value = "google.com";
+    form.dispatchEvent(new Event("submit")); // Trigger the search
+    sidebar.classList.remove("sidebar-open"); // Close menu
+  });
+}
+
+if (btnHaha) {
+  btnHaha.addEventListener("click", () => {
+    searchBox.value = "hahagames.com";
+    form.dispatchEvent(new Event("submit"));
+    sidebar.classList.remove("sidebar-open");
+  });
+}
+
+// 4. Toggle Debug Logs
+if (enableDebugCheckbox) {
+  enableDebugCheckbox.addEventListener("change", (e) => {
+    if (debugLogs) {
+      debugLogs.style.display = e.target.checked ? "block" : "none";
+    }
+  });
+}
 
 // -------------------- HELPERS --------------------
 function isValidURL(str) {
@@ -46,13 +100,18 @@ function showSpinner(show = true) {
 
 // --- unified log system ---
 function logDebug(message, type = "info") {
+  // Only log if the element exists
+  if (!debugLogs) {
+    console.log(message);
+    return;
+  }
+  
   const p = document.createElement("p");
   p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
   p.style.color = type === "error" ? "red" : type === "warn" ? "orange" : "black";
-  if (debugLogs) {
-    debugLogs.appendChild(p);
-    debugLogs.scrollTop = debugLogs.scrollHeight;
-  }
+  
+  debugLogs.appendChild(p);
+  debugLogs.scrollTop = debugLogs.scrollHeight;
   console.log(message);
 }
 const topLog = logDebug; // alias for backward compatibility
