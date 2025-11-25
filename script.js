@@ -50,28 +50,17 @@ if (closeSidebarBtn) {
   });
 }
 
-// 3. Quick Links Logic (UPDATED)
+// 3. Quick Links Logic (UPDATED & FIXED)
 if (btnGoogle) {
   btnGoogle.addEventListener("click", () => {
-    // 1. The specific iframe-able URL you requested
+    // We use the proxy for Google to prevent the "Blank White Screen" (X-Frame-Options block)
     const googleUrl = "https://www.google.com/webhp?igu=1";
-    
-    // 2. Update the search box so the user sees the URL
     searchBox.value = googleUrl;
     
-    // 3. Show loading spinner
-    showSpinner(true);
-    iframeContainer.style.display = "block";
-
-    // 4. DIRECT LOAD: Because this is a special Google link, 
-    // we load it directly into the iframe to ensure it works.
-    // (If we sent this through the proxy, the proxy might break the 'igu=1' magic)
-    iframe.src = googleUrl;
+    // Use the robust loader to ensure container is visible
+    loadClientProxy(googleUrl);
     
-    // 5. Hide spinner when loaded
-    iframe.onload = () => showSpinner(false);
-
-    // 6. Close the sidebar
+    // Close sidebar
     sidebar.classList.remove("sidebar-open");
     sidebar.setAttribute("aria-hidden", "true");
   });
@@ -79,15 +68,12 @@ if (btnGoogle) {
 
 if (btnHaha) {
   btnHaha.addEventListener("click", () => {
-    const hahaUrl = "https://www.hahagames.com";
-    
+    // Use the exact domain that works manually
+    const hahaUrl = "https://hahagames.com"; 
     searchBox.value = hahaUrl;
-    iframeContainer.style.display = "block";
-
-    // For games, we usually still want the Proxy capability, 
-    // so we use your loadClientProxy function.
+    
     loadClientProxy(hahaUrl);
-
+    
     sidebar.classList.remove("sidebar-open");
     sidebar.setAttribute("aria-hidden", "true");
   });
@@ -155,23 +141,12 @@ form.addEventListener("submit", async (e) => {
     urlInput = "https://" + urlInput;
   }
 
-  iframeContainer.style.display = "block";
-  showSpinner(true);
-
-  // Use client-proxy.html for sites that need proxying (special handling)
-  if (needsClientProxy(urlInput)) {
-    loadClientProxy(urlInput);
-    return;
-  }
-
+  // Use client-proxy for everything (simplifies logic and fixes consistency)
   if (needsBlockedHandling(urlInput)) {
     alert("This site cannot be proxied reliably.");
-    showSpinner(false);
     return;
   }
 
-  // For everything else, route through client-proxy as well (keeps behavior consistent)
-  // If you want direct iframe bypass for certain sites add them to a whitelist and set iframe.src directly.
   loadClientProxy(urlInput);
 });
 
@@ -186,12 +161,30 @@ fullscreenBtn.addEventListener("click", () => {
   }
 });
 
-// -------------------- CLIENT PROXY LOADING --------------------
+// -------------------- CLIENT PROXY LOADING (FIXED) --------------------
 function loadClientProxy(url) {
+  console.log("Loading URL:", url);
+
+  // 1. Force the container to be visible (This fixes the "nothing showing" bug)
+  iframeContainer.style.display = "block"; 
   showSpinner(true);
-  // Use client-proxy.html which itself loads the backend worker in an inner iframe
-  iframe.src = "client-proxy.html#url=" + encodeURIComponent(url);
-  iframe.onload = () => showSpinner(false);
+  
+  // 2. Clear iframe briefly to force a refresh (fixes stuck iframes)
+  iframe.src = "about:blank";
+
+  // 3. Load the Proxy after a tiny delay
+  setTimeout(() => {
+    // Check if we need to clean up the URL (add https if missing)
+    if (!url.startsWith("http")) { 
+        url = "https://" + url.trim(); 
+    }
+
+    // Load via the client-proxy.html system
+    iframe.src = "client-proxy.html#url=" + encodeURIComponent(url);
+
+    // 4. Fallback: Hide spinner after 8 seconds if iframe gets stuck
+    setTimeout(() => showSpinner(false), 8000);
+  }, 50);
 }
 
 // -------------------- MESSAGE HANDLER (client-proxy) --------------------
@@ -219,6 +212,8 @@ window.addEventListener("message", (event) => {
     showSpinner(false);
     return;
   }
+  
+  // Dismiss spinner when proxy says it's ready
   if (d.type === "clientProxy:hideLoading" || d.type === "loadingDismissed") {
     showSpinner(false);
     topLog("Overlay hidden");
@@ -244,10 +239,6 @@ window.addEventListener("load", () => {
   const target = (new URLSearchParams(window.location.hash.replace(/^#/, ""))).get("url");
   if (target) {
     logDebug("Auto-loading URL from hash: " + target);
-    if (clientProxySites.some(s => new URL(target).hostname.includes(s))) {
-      loadClientProxy(target);
-    } else {
-      loadClientProxy(target);
-    }
+    loadClientProxy(target);
   }
 });
