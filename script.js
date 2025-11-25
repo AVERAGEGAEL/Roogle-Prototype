@@ -50,20 +50,46 @@ if (closeSidebarBtn) {
   });
 }
 
-// 3. Quick Links
+// 3. Quick Links Logic (UPDATED)
 if (btnGoogle) {
   btnGoogle.addEventListener("click", () => {
-    searchBox.value = "google.com";
-    form.dispatchEvent(new Event("submit")); // Trigger the search
-    sidebar.classList.remove("sidebar-open"); // Close menu
+    // 1. The specific iframe-able URL you requested
+    const googleUrl = "https://www.google.com/webhp?igu=1";
+    
+    // 2. Update the search box so the user sees the URL
+    searchBox.value = googleUrl;
+    
+    // 3. Show loading spinner
+    showSpinner(true);
+    iframeContainer.style.display = "block";
+
+    // 4. DIRECT LOAD: Because this is a special Google link, 
+    // we load it directly into the iframe to ensure it works.
+    // (If we sent this through the proxy, the proxy might break the 'igu=1' magic)
+    iframe.src = googleUrl;
+    
+    // 5. Hide spinner when loaded
+    iframe.onload = () => showSpinner(false);
+
+    // 6. Close the sidebar
+    sidebar.classList.remove("sidebar-open");
+    sidebar.setAttribute("aria-hidden", "true");
   });
 }
 
 if (btnHaha) {
   btnHaha.addEventListener("click", () => {
-    searchBox.value = "hahagames.com";
-    form.dispatchEvent(new Event("submit"));
+    const hahaUrl = "https://www.hahagames.com";
+    
+    searchBox.value = hahaUrl;
+    iframeContainer.style.display = "block";
+
+    // For games, we usually still want the Proxy capability, 
+    // so we use your loadClientProxy function.
+    loadClientProxy(hahaUrl);
+
     sidebar.classList.remove("sidebar-open");
+    sidebar.setAttribute("aria-hidden", "true");
   });
 }
 
