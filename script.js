@@ -107,7 +107,9 @@ function needsBlockedHandling(url) {
 }
 
 function showSpinner(show = true) {
-  loadingSpinner.style.display = show ? "block" : "none";
+  if (loadingSpinner) {
+      loadingSpinner.style.display = show ? "block" : "none";
+  }
 }
 
 // --- unified log system ---
