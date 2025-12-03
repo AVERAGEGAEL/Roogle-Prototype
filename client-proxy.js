@@ -37,7 +37,7 @@ async function loadViaBackend(url) {
   showOverlay();
   log("Starting proxy engine for: " + url);
 
-  // UPDATED: The real list provided by you
+  // UPDATED BACKEND LIST
   const backends = [
     "https://cloud1.uraverageopdoge.workers.dev",
     "https://cloud2.rageinhaler.workers.dev",
@@ -45,27 +45,28 @@ async function loadViaBackend(url) {
     "https://cloud1.rageinhaler.workers.dev",
     "https://cloud2.uraverageopdoge.workers.dev",
     "https://cloud3.kevinthejordan.workers.dev",
-    "https://cloud2.kevinthejordan.workers.dev/"
+    "https://cloud2.kevinthejordan.workers.dev"
   ];
 
   for (const backend of backends) {
-    // Construct the proxy URL. 
-    // Format: backend_url + "?url=" + encoded_target
-    const proxyUrl = `${backend}?url=${encodeURIComponent(target)}`;
+    sendParent({ type: "clientProxy:backendTest", backend, target: url });
     
-    sendParent({ type: "clientProxy:backendTest", backend, target });
-
+    // Construct the proxy URL (backend + ?url=...)
+    const proxyUrl = `${backend}?url=${encodeURIComponent(url)}`;
+    
+    // Attempt to load
     const success = await tryLoad(proxyUrl, backend);
+    
     if (success) {
-      log("Successfully loaded via: " + backend);
+      log(`Success with backend: ${backend}`, "success");
       sendParent({ type: "clientProxy:backendSuccess", backend });
-      return; 
+      return; // Stop after first success
     } else {
       sendParent({ type: "clientProxy:backendFail", backend });
     }
   }
 
-  // If we reach here, all backends failed
+  // If loop finishes, all failed
   log("All backends failed.", "error");
   sendParent({ type: "clientProxy:backendError", info: "All proxies failed." });
   alert("Could not connect to any proxy server. Please try again later.");
@@ -125,7 +126,7 @@ window.addEventListener("message", (ev) => {
   const d = ev.data || {};
   
   if (d.type === "navigate" && d.url) {
-    // Reset and try loading the new URL via rotation
+    // If the inner site asks to navigate, restart the rotation for the new URL
     loadViaBackend(d.url);
   }
 });
