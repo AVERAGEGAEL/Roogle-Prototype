@@ -22,7 +22,7 @@ const iframeFallback = "";
 const clientProxySites = ["google.com", "youtube.com"];
 const blockedSites = ["poki.com", "retrogames.cc", "coolmathgames.com"];
 
-// UPDATED: The real list provided by you
+// --- UPDATED BACKEND LIST (CORRECTED) ---
 const TRUSTED_RECAPTCHA_ORIGINS = [
   "https://cloud1.uraverageopdoge.workers.dev",
   "https://cloud2.rageinhaler.workers.dev",
@@ -30,9 +30,10 @@ const TRUSTED_RECAPTCHA_ORIGINS = [
   "https://cloud1.rageinhaler.workers.dev",
   "https://cloud2.uraverageopdoge.workers.dev",
   "https://cloud3.kevinthejordan.workers.dev",
-  "https://cloud2.kevinthejordan.workers.dev/"
+  "https://cloud2.kevinthejordan.workers.dev"
 ];
 
+// Note: This URL is used for fallback if specific worker logic isn't triggered
 const BASE_WORKER_URL = "https://cloud1.uraverageopdoge.workers.dev/";
 
 // -------------------- UTILITY FUNCTIONS --------------------
@@ -45,7 +46,7 @@ function showSpinner(show) {
 }
 
 function topLog(message, level = "info") {
-  if (enableDebugCheckbox.checked) {
+  if (enableDebugCheckbox && enableDebugCheckbox.checked) {
     const p = document.createElement("p");
     p.classList.add(level);
     p.textContent = message;
@@ -54,7 +55,7 @@ function topLog(message, level = "info") {
 }
 
 function logDebug(message, level = "info") {
-  if (enableDebugCheckbox.checked) {
+  if (enableDebugCheckbox && enableDebugCheckbox.checked) {
     const p = document.createElement("p");
     p.classList.add(level);
     p.textContent = message;
@@ -94,7 +95,7 @@ function isProxyRequired(url) {
   return false;
 }
 
-// Loads the URL using the Client Proxy Rotation (Slow but reliable)
+// Loads the URL using the Client Proxy Rotation (Slow but Reliable)
 function loadClientProxy(url) {
   topLog(`Loading URL via Client Proxy: ${url}`);
   showSpinner(true);
@@ -104,14 +105,11 @@ function loadClientProxy(url) {
   iframe.src = `./client-proxy.html#url=${encodeURIComponent(url)}`;
 }
 
-// NEW: Loads the URL directly (Fast but may be blocked)
+// Loads the URL using a direct embed (Fast but potentially blocked)
 function loadDirectEmbed(url) {
     const normalizedUrl = normalizeUrl(url);
     topLog(`Loading URL via Direct Embed: ${normalizedUrl}`, "warn");
     
-    // Update the address bar to show what we are loading
-    searchBox.value = getBaseUrl(normalizedUrl);
-
     // Clear the current content and set the new src
     iframe.src = ''; 
     iframe.src = normalizedUrl;
@@ -144,8 +142,11 @@ form.addEventListener("submit", (e) => {
   e.preventDefault();
   const url = searchBox.value.trim();
   if (url) {
-    // Standard search always uses the proxy system for reliability
-    loadClientProxy(url);
+    if (isProxyRequired(url)) {
+      loadClientProxy(url);
+    } else {
+      loadClientProxy(url);
+    }
   }
 });
 
@@ -169,18 +170,19 @@ closeSidebarBtn.addEventListener("click", () => {
   sidebar.classList.remove("sidebar-open");
 });
 
-// -------------------- QUICK LINK DIRECT EMBED --------------------
-// Updated to use loadDirectEmbed for speed
+// -------------------- QUICK LINK LISTENERS (UPDATED) --------------------
 
 btnGoogle.addEventListener("click", () => {
-  loadDirectEmbed("https://www.google.com");
+  // FAST DIRECT EMBED with IGU=1 to bypass frame blocks
+  loadDirectEmbed("https://www.google.com/webhp?igu=1");
 });
 
 btnHaha.addEventListener("click", () => {
+  // FAST DIRECT EMBED
   loadDirectEmbed("https://www.hahagames.com");
 });
 
-// -------------------- MESSAGE LISTENER (from client-proxy.html) --------------------
+// -------------------- MESSAGE LISTENER --------------------
 window.addEventListener("message", (ev) => {
   const d = ev.data || {};
 
@@ -211,10 +213,9 @@ window.addEventListener("message", (ev) => {
     return;
   }
 
-  // ---------- Navigation command from iframe (if inner page posts a 'navigate' message) ----------
+  // ---------- Navigation command from iframe ----------
   if (d && d.type === "navigate" && d.url) {
     topLog(`Navigation requested by proxied page → ${d.url}`);
-    // route through client-proxy
     loadClientProxy(d.url);
     return;
   }
