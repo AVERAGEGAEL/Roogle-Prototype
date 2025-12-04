@@ -72,8 +72,10 @@ function getBaseUrl(url) {
   }
 }
 
+// FIX: Robust normalization to ensure https:// is always present
 function normalizeUrl(url) {
-  if (!url.startsWith("http")) {
+  url = url.trim();
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
     url = "https://" + url;
   }
   return url;
@@ -97,12 +99,20 @@ function isProxyRequired(url) {
 
 // Loads the URL using the Client Proxy Rotation (Slow but Reliable)
 function loadClientProxy(url) {
-  topLog(`Loading URL via Client Proxy: ${url}`);
-  showSpinner(true);
-  searchBox.value = getBaseUrl(url);
+  // Ensure URL is safe before loading
+  const safeUrl = normalizeUrl(url);
 
-  // The proxyIframe loads the client-proxy.html with the target URL in the hash
-  iframe.src = `./client-proxy.html#url=${encodeURIComponent(url)}`;
+  topLog(`Loading URL via Client Proxy: ${safeUrl}`);
+  showSpinner(true);
+  searchBox.value = getBaseUrl(safeUrl);
+
+  // CRITICAL FIX: Briefly reset src to force a reload. 
+  // Without this, hitting "Enter" on a new URL might just change the hash and do nothing.
+  iframe.src = "about:blank";
+  
+  setTimeout(() => {
+     iframe.src = `./client-proxy.html#url=${encodeURIComponent(safeUrl)}`;
+  }, 50);
 }
 
 // Loads the URL using a direct embed (Fast but potentially blocked)
@@ -121,15 +131,16 @@ function loadDirectEmbed(url) {
 
 function loadUrl(url) {
   if (!url) return;
+  const safeUrl = normalizeUrl(url);
   
-  if (isProxyRequired(url)) {
-    loadClientProxy(url);
+  if (isProxyRequired(safeUrl)) {
+    loadClientProxy(safeUrl);
   } else {
     // If we have a single fallback worker and the site isn't special, try that first
-    if (iframeFallback && !url.includes(BASE_WORKER_URL)) {
-      loadClientProxy(`${BASE_WORKER_URL}?url=${encodeURIComponent(url)}`);
+    if (iframeFallback && !safeUrl.includes(BASE_WORKER_URL)) {
+      loadClientProxy(`${BASE_WORKER_URL}?url=${encodeURIComponent(safeUrl)}`);
     } else {
-      loadClientProxy(url);
+      loadClientProxy(safeUrl);
     }
   }
 }
@@ -140,8 +151,12 @@ function loadUrl(url) {
 // Form submission handler
 form.addEventListener("submit", (e) => {
   e.preventDefault();
-  const url = searchBox.value.trim();
-  if (url) {
+  const rawUrl = searchBox.value.trim();
+  
+  if (rawUrl) {
+    // FIX: Normalize the input (add https:// if missing)
+    const url = normalizeUrl(rawUrl);
+
     if (isProxyRequired(url)) {
       loadClientProxy(url);
     } else {
@@ -216,7 +231,7 @@ window.addEventListener("message", (ev) => {
   // ---------- Navigation command from iframe ----------
   if (d && d.type === "navigate" && d.url) {
     topLog(`Navigation requested by proxied page → ${d.url}`);
-    loadClientProxy(d.url);
+    loadClientProxy(d.url); // This will now use the reload hack inside loadClientProxy
     return;
   }
 
