@@ -1,7 +1,7 @@
 // -------------------- CONFIG / UI ELEMENTS --------------------
 const iframe = document.getElementById("proxyIframe");
 const iframeContainer = document.getElementById("iframe-container");
-const loadingSpinner = document.getElementById("loadingSpinner");
+// REMOVED: const loadingSpinner... (We don't need it)
 const searchBox = document.getElementById("url");
 const form = document.getElementById("proxyForm");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
@@ -37,13 +37,8 @@ const TRUSTED_RECAPTCHA_ORIGINS = [
 const BASE_WORKER_URL = "https://cloud1.uraverageopdoge.workers.dev/";
 
 // -------------------- UTILITY FUNCTIONS --------------------
-function showSpinner(show) {
-  if (show) {
-    loadingSpinner.classList.remove("hidden");
-  } else {
-    loadingSpinner.classList.add("hidden");
-  }
-}
+
+// REMOVED: function showSpinner(show) { ... } 
 
 function topLog(message, level = "info") {
   if (enableDebugCheckbox && enableDebugCheckbox.checked) {
@@ -103,11 +98,10 @@ function loadClientProxy(url) {
   const safeUrl = normalizeUrl(url);
 
   topLog(`Loading URL via Client Proxy: ${safeUrl}`);
-  showSpinner(true);
+  // REMOVED: showSpinner(true);
   searchBox.value = getBaseUrl(safeUrl);
 
   // CRITICAL FIX: Briefly reset src to force a reload. 
-  // Without this, hitting "Enter" on a new URL might just change the hash and do nothing.
   iframe.src = "about:blank";
   
   setTimeout(() => {
@@ -124,8 +118,7 @@ function loadDirectEmbed(url) {
     iframe.src = ''; 
     iframe.src = normalizedUrl;
     
-    // Since this bypasses the proxy engine, we must manually dismiss the spinner
-    showSpinner(false); 
+    // REMOVED: showSpinner(false); 
     topLog("Direct embed attempted. Check console for X-Frame-Options or CSP blocks.", "warn");
 }
 
@@ -212,18 +205,18 @@ window.addEventListener("message", (ev) => {
   if (d.type === "clientProxy:backendFail") return topLog(`Backend fail: ${d.backend} — ${d.info || d.error || d.status}`, "warn");
   if (d.type === "clientProxy:backendError" || d.type === "backendError") {
     topLog(`Backend returned HTML error/captcha: ${d.info || d.payload || 'unknown'}`, "warn");
-    showSpinner(false);
+    // REMOVED: showSpinner(false);
     return;
   }
   if (d.type === "clientProxy:iframeLoaded") {
     topLog("Iframe reports loaded");
-    showSpinner(false);
+    // REMOVED: showSpinner(false);
     return;
   }
   
   // Dismiss spinner when proxy says it's ready
   if (d.type === "clientProxy:hideLoading" || d.type === "loadingDismissed") {
-    showSpinner(false);
+    // REMOVED: showSpinner(false);
     topLog("Overlay hidden");
     return;
   }
@@ -231,7 +224,7 @@ window.addEventListener("message", (ev) => {
   // ---------- Navigation command from iframe ----------
   if (d && d.type === "navigate" && d.url) {
     topLog(`Navigation requested by proxied page → ${d.url}`);
-    loadClientProxy(d.url); // This will now use the reload hack inside loadClientProxy
+    loadClientProxy(d.url); 
     return;
   }
 
